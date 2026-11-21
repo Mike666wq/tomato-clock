@@ -10,6 +10,19 @@
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json"
   },
+  "build": {
+    "appId": "com.local.pomodoro",
+    "productName": "番茄钟",
+    "directories": { "output": "release" },
+    "files": ["out/**/*", "resources/**/*", "package.json"],
+    "extraResources": [{ "from": "resources", "to": "resources" }],
+    "win": { "icon": "resources/icon.ico", "target": ["nsis", "portable"] },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    }
+  },
   "dependencies": {
     "react": "^19.3.1",
     "react-dom": "^19.3.1"

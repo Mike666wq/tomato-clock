@@ -47,6 +47,9 @@ export function RecordCard({ session, onSubmit, onSkip }: Props): React.JSX.Elem
     <div className="record-overlay">
       <div
         className="record-card"
+        // 卡片说的是"刚结束的那一段"，所以强调色跟结束段走，不跟当前阶段走：
+        // 专注结束 → 红，休息结束 → 绿
+        data-kind={session.kind}
         ref={cardRef}
         tabIndex={-1}
         onKeyDown={onKeyDown}

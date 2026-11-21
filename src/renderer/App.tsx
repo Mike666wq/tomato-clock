@@ -1,11 +1,13 @@
-// 应用外壳。第 1 轮只有主界面（计时）；
-// 统计页与设置页在第 4 轮接入导航。
+// 应用外壳：标题栏 + 页面（计时 / 统计 / 设置）+ 记录卡片 + 提示条。
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { TitleBar } from './components/TitleBar'
 import { Toast } from './components/Toast'
 import { RecordCard } from './components/RecordCard'
+import { Nav, type PageKey } from './components/Nav'
 import { Timer } from './pages/Timer'
+import { Stats } from './pages/Stats'
+import { SettingsPage } from './pages/Settings'
 import type { InterruptKind, Notice, Session } from '../shared/types'
 
 /** 结束提醒：播放自带 wav（不依赖系统提示音） */
@@ -21,23 +23,40 @@ function playDing(volume: number): void {
   }
 }
 
+/** 开发期可以用 ?page=stats 直接打开某页（打包后无效） */
+function initialPage(): PageKey {
+  if (!import.meta.env.DEV) return 'timer'
+  const p = new URLSearchParams(window.location.search).get('page')
+  return p === 'stats' || p === 'settings' ? p : 'timer'
+}
+
 export default function App(): React.JSX.Element {
   const [notice, setNotice] = useState<Notice | null>(null)
   const [record, setRecord] = useState<Session | null>(null)
   const [flash, setFlash] = useState(false)
+  const [page, setPage] = useState<PageKey>(initialPage)
   const noticeTimer = useRef<number | null>(null)
 
-  const showNotice = useCallback((n: Notice) => {
-    setNotice(n)
+  const showNotice = useCallback((text: string) => {
+    setNotice({ id: String(Date.now()), text, tone: 'info' })
     if (noticeTimer.current) window.clearTimeout(noticeTimer.current)
-    noticeTimer.current = window.setTimeout(() => setNotice(null), 6000)
+    noticeTimer.current = window.setTimeout(() => setNotice(null), 5000)
+  }, [])
+
+  const showWarn = useCallback((text: string) => {
+    setNotice({ id: String(Date.now()), text, tone: 'warn' })
+    if (noticeTimer.current) window.clearTimeout(noticeTimer.current)
+    noticeTimer.current = window.setTimeout(() => setNotice(null), 8000)
   }, [])
 
   useEffect(() => {
     const api = window.pomodoro
     if (!api) return
 
-    const offNotice = api.notice.onShow(showNotice)
+    const offNotice = api.notice.onShow((n) => {
+      if (n.tone === 'warn') showWarn(n.text)
+      else showNotice(n.text)
+    })
     const offOpen = api.records.onOpen((s) => setRecord(s))
     const offClose = api.records.onClose(() => setRecord(null))
     const offFire = api.reminder.onFire(() => {
@@ -49,7 +68,7 @@ export default function App(): React.JSX.Element {
       })
     })
     // 早于界面订阅发出的通知在这里补取
-    void api.notice.take().then((list) => list.forEach(showNotice))
+    void api.notice.take().then((list) => list.forEach((n) => (n.tone === 'warn' ? showWarn(n.text) : showNotice(n.text))))
 
     return () => {
       offNotice()
@@ -57,7 +76,7 @@ export default function App(): React.JSX.Element {
       offClose()
       offFire()
     }
-  }, [showNotice])
+  }, [showNotice, showWarn])
 
   const submitRecord = (task: string, interrupt: InterruptKind): void => {
     if (record) window.pomodoro?.records.submit(record.id, task, interrupt)
@@ -71,7 +90,10 @@ export default function App(): React.JSX.Element {
   return (
     <div className={flash ? 'app app--flash' : 'app'}>
       <TitleBar />
-      <Timer />
+      {page === 'timer' ? <Timer /> : null}
+      {page === 'stats' ? <Stats /> : null}
+      {page === 'settings' ? <SettingsPage onNotice={showNotice} /> : null}
+      <Nav page={page} onChange={setPage} />
       {record ? <RecordCard session={record} onSubmit={submitRecord} onSkip={skipRecord} /> : null}
       {notice ? <Toast notice={notice} onClose={() => setNotice(null)} /> : null}
     </div>

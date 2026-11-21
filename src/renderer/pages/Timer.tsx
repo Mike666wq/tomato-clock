@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Ring } from '../components/Ring'
 import { Controls } from '../components/TimerControls'
+import { keyCapture } from '../keyCapture'
 import { PHASE_LABEL, type RecordSummary, type TimerState } from '../../shared/types'
 
 const FALLBACK: TimerState = {
@@ -66,9 +67,10 @@ export function Timer(): React.JSX.Element {
   const skip = (): void => window.pomodoro?.timer.action('skip')
   const reset = (): void => window.pomodoro?.timer.action('reset')
 
-  // 空格键也能控制（方案 P0-1）
+  // 空格键也能控制（方案 P0-1）。正在改键时让路
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
+      if (keyCapture.active) return
       if (e.code === 'Space') {
         e.preventDefault()
         toggle()

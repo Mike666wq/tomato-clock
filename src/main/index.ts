@@ -3,7 +3,7 @@
 // 一条不可动摇的架构约定（方案第八节）：计时状态归主进程持有，
 // 窗口关掉（收进托盘）计时照样走，渲染层只读状态、发动作。
 
-import { app, BrowserWindow, globalShortcut, ipcMain, Notification, screen } from 'electron'
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, screen } from 'electron'
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { jsonStore } from './store/json-store'
@@ -11,6 +11,9 @@ import { setupScreenshot } from './screenshot'
 import { Timer, type TimerAction } from './timer'
 import { createTray, type TrayController } from './tray'
 import { createReminder, type ReminderController } from './reminder'
+import { getShortcuts, registerShortcuts, replaceShortcut, type ShortcutId } from './shortcuts'
+import { buildStats } from './stats'
+import { exportCsv } from './csv'
 import { log } from './logger'
 import {
   DEFAULT_SETTINGS,
@@ -19,7 +22,8 @@ import {
   type Notice,
   type PhaseCompleteInfo,
   type RecordSummary,
-  type Session
+  type Session,
+  type Settings
 } from '../shared/types'
 
 // 必须与 src/renderer/styles/tokens.css 的 --bg 保持一致。
@@ -200,8 +204,17 @@ function createWindow(): BrowserWindow {
   })
 
   const devUrl = process.env['ELECTRON_RENDERER_URL']
-  if (devUrl) {
-    void win.loadURL(devUrl)
+  // DEV 判断不能省：这一段里的开发期变量名不能进打包产物
+  if (import.meta.env.DEV && devUrl) {
+    // 开发期支持 ?page=stats 之类的预览参数
+    const q: string[] = []
+    const phase = process.env['POMODORO_PHASE']
+    const elapsed = process.env['POMODORO_ELAPSED']
+    const page = process.env['POMODORO_PAGE']
+    if (phase) q.push(`phase=${phase}`)
+    if (elapsed) q.push(`elapsed=${elapsed}`)
+    if (page) q.push(`page=${page}`)
+    void win.loadURL(q.length ? `${devUrl}?${q.join('&')}` : devUrl)
   } else {
     void win.loadFile(path.join(__dirname, '../renderer/index.html'))
   }
@@ -209,26 +222,14 @@ function createWindow(): BrowserWindow {
   return win
 }
 
-function registerShortcuts(): void {
-  const bindings: Array<[string, () => void]> = [
-    ['CommandOrControl+Alt+Space', () => timer?.apply('toggle')],
-    ['CommandOrControl+Alt+P', () => showWindow()]
-  ]
-
-  for (const [accelerator, handler] of bindings) {
-    try {
-      const ok = globalShortcut.register(accelerator, handler)
-      if (ok) {
-        log.info(`全局快捷键已注册: ${accelerator}`)
-      } else {
-        log.error(`全局快捷键注册失败（可能已被其他程序占用）: ${accelerator}`)
-        // 光写日志用户看不见，要推到界面上
-        pushNotice(`快捷键 ${accelerator} 注册失败，可能被其他程序占用`, 'warn')
-      }
-    } catch (err) {
-      log.error(`全局快捷键注册异常 ${accelerator}: ${(err as Error).message}`)
-      pushNotice(`快捷键 ${accelerator} 注册异常`, 'warn')
-    }
+function registerAllShortcuts(): void {
+  const failed = registerShortcuts({
+    toggle: () => timer?.apply('toggle'),
+    show: () => showWindow()
+  })
+  for (const acc of failed) {
+    // 光写日志用户看不见，要推到界面上
+    pushNotice(`快捷键 ${acc} 注册失败，可能被其他程序占用`, 'warn')
   }
 }
 
@@ -289,6 +290,64 @@ if (!app.requestSingleInstanceLock()) {
 
     ipcMain.handle('settings:get', () => jsonStore.getSettings())
 
+    // 保存设置。计时进行中改时长只影响下一段（Timer 内部处理），这里只落盘 + 通知计时器
+    ipcMain.on('settings:save', (_e, patch: Partial<Settings>) => {
+      void jsonStore.getSettings().then(async (current) => {
+        const next: Settings = { ...current, ...patch }
+        await jsonStore.saveSettings(next)
+        timer?.updateSettings(next)
+        if (patch.launchAtLogin !== undefined && patch.launchAtLogin !== current.launchAtLogin) {
+          try {
+            app.setLoginItemSettings({
+              openAtLogin: next.launchAtLogin,
+              path: process.execPath,
+              args: app.isPackaged ? [] : [app.getAppPath()]
+            })
+            log.info(`开机自启已${next.launchAtLogin ? '开启' : '关闭'}`)
+          } catch (err) {
+            log.error(`设置开机自启失败: ${(err as Error).message}`)
+            pushNotice('设置开机自启失败', 'warn')
+          }
+        }
+      })
+    })
+
+    // 统计：今日按小时分布 / 近 7 天趋势 / 打断原因排行
+    ipcMain.handle('stats:get', async () => buildStats(await jsonStore.listSessions()))
+
+    // 快捷键：查看与改键（失败走同一条提示链路）
+    ipcMain.handle('shortcuts:get', () => getShortcuts())
+    ipcMain.handle('shortcuts:set', (_e, id: ShortcutId, accelerator: string) => {
+      const res = replaceShortcut(id, accelerator)
+      if (!res.ok) {
+        log.error(`改键失败 ${id} → ${accelerator}: ${res.error ?? ''}`)
+        pushNotice(res.error ?? '快捷键修改失败', 'warn')
+      }
+      return res
+    })
+
+    // CSV 导出（带 UTF-8 BOM，Excel 打开不乱码）
+    ipcMain.handle('csv:export', async () => {
+      const sessions = await jsonStore.listSessions()
+      const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+      // 开发期可以指定输出路径，跳过原生保存对话框（自动化验证用）
+      const devOut = import.meta.env.DEV ? process.env['POMODORO_CSV_OUT'] : undefined
+      if (devOut) {
+        await exportCsv(devOut, sessions)
+        log.info(`已导出记录到 ${devOut}`)
+        return { ok: true, path: devOut }
+      }
+      const res = await dialog.showSaveDialog(mainWindow!, {
+        title: '导出记录',
+        defaultPath: path.join(app.getPath('documents'), `番茄钟记录-${stamp}.csv`),
+        filters: [{ name: 'CSV', extensions: ['csv'] }]
+      })
+      if (res.canceled || !res.filePath) return { ok: false }
+      await exportCsv(res.filePath, sessions)
+      log.info(`已导出记录到 ${res.filePath}`)
+      return { ok: true, path: res.filePath }
+    })
+
     // 渲染层挂载后主动来取之前攒下的通知（推送早于界面订阅会丢，所以改成拉取式）
     ipcMain.handle('notice:take', () => pendingNotices.splice(0, pendingNotices.length))
 
@@ -303,7 +362,7 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.on('window:close', () => mainWindow?.hide())
     ipcMain.on('window:show', () => showWindow())
 
-    registerShortcuts()
+    registerAllShortcuts()
 
     // 启动时把汇总推给界面（重启后底部状态行要能恢复）
     void pushSummary()
@@ -331,7 +390,5 @@ if (!app.requestSingleInstanceLock()) {
     globalShortcut.unregisterAll()
     timer?.dispose()
     tray?.destroy()
-  })
-}
+  })}
 
-export { Notification }

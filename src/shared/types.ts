@@ -79,6 +79,31 @@ export type Notice = {
   tone: 'info' | 'warn'
 }
 
+/** 统计页需要的数据，由主进程算好 */
+export type StatsData = {
+  /** 今日完成的番茄数 */
+  todayCount: number
+  /** 今日专注总秒数 */
+  todayFocusSec: number
+  /** 历史专注总秒数 */
+  totalFocusSec: number
+  /** 今日按小时分布，24 个槽位，单位分钟 */
+  todayByHour: number[]
+  /** 近 7 天（含今天），索引 0 = 6 天前 */
+  last7Days: Array<{ date: string; label: string; focusSec: number }>
+  /** 打断原因排行 */
+  interrupts: Array<{ kind: InterruptKind; label: string; count: number }>
+  /** 全部记录 */
+  sessions: Session[]
+}
+
+/** 快捷键项 */
+export type ShortcutDef = {
+  id: 'toggle' | 'show'
+  accelerator: string
+  label: string
+}
+
 /** 本地存储文件的整体结构 */
 export type AppData = {
   schemaVersion: number
@@ -93,7 +118,7 @@ export const DEFAULT_SETTINGS: Settings = {
   roundsBeforeLong: 4,
   autoStartNext: false,
   soundOn: true,
-  volume: 0.6,
+  volume: 0.5,
   launchAtLogin: false,
   window: { w: 480, h: 580 }
 }

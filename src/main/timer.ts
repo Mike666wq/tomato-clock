@@ -27,6 +27,12 @@ export class Timer {
 
   /** 当前阶段开始时刻（墙钟） */
   private phaseStartedAt = Date.now()
+  /**
+   * 当前这一段的计划总长。**在这一段跑完之前冻结**：
+   * 设置里改了时长只影响下一段，当前段的 total 不动，
+   * 否则圆环的分母会当场跳一下。
+   */
+  private segmentTotalSec = 0
   /** 当前阶段累计暂停毫秒 */
   private pausedMs = 0
   /** 本次暂停的开始时刻 */
@@ -35,6 +41,7 @@ export class Timer {
   constructor(settings: Settings) {
     this.settings = settings
     this.remainingSecCached = this.phaseSec('focus')
+    this.segmentTotalSec = this.remainingSecCached
 
     if (import.meta.env.DEV) {
       this.devSeed = (phase?: PhaseKind, elapsedSec = 0): void => {
@@ -42,7 +49,8 @@ export class Timer {
         this.phaseStartedAt = Date.now()
         this.pausedMs = 0
         this.pauseStartedAt = null
-        this.remainingSecCached = Math.max(0, this.phaseSec(this.phase) - elapsedSec)
+        this.segmentTotalSec = this.phaseSec(this.phase)
+        this.remainingSecCached = Math.max(0, this.segmentTotalSec - elapsedSec)
         this.running = false
         this.endsAt = null
         this.emit()
@@ -55,7 +63,7 @@ export class Timer {
   // ---------- 对外接口 ----------
 
   getState(): TimerState {
-    const total = this.phaseSec(this.phase)
+    const total = this.segmentTotalSec
     const remaining = this.remainingSec()
     return {
       phase: this.phase,
@@ -79,12 +87,20 @@ export class Timer {
     return () => this.phaseListeners.delete(fn)
   }
 
-  /** 设置变化时调用（时长等） */
+  /**
+   * 设置变化时调用（时长、轮数等）。
+   *
+   * 规则（肥鱼定死）：计时进行中修改时长，只影响下一段，当前段不变。
+   * 当前段的 segmentTotalSec 与剩余时间都不动，所以圆环也不会跳。
+   * 只有"这一段还没开始跑"（不计时、也没消耗过）时才立刻生效。
+   */
   updateSettings(settings: Settings): void {
     this.settings = settings
-    if (!this.running) {
-      // 暂停状态下刷新当前阶段时长
-      this.remainingSecCached = this.phaseSec(this.phase)
+    const newTotal = this.phaseSec(this.phase)
+    const notStarted = !this.running && this.remainingSecCached === this.segmentTotalSec
+    if (notStarted && newTotal !== this.segmentTotalSec) {
+      this.segmentTotalSec = newTotal
+      this.remainingSecCached = newTotal
       this.emit()
     }
   }
@@ -164,7 +180,8 @@ export class Timer {
     this.pauseStartedAt = null
     this.pausedMs = 0
     this.phaseStartedAt = Date.now()
-    this.remainingSecCached = this.phaseSec(this.phase)
+    this.segmentTotalSec = this.phaseSec(this.phase)
+    this.remainingSecCached = this.segmentTotalSec
     this.emit()
   }
 
@@ -231,7 +248,9 @@ export class Timer {
     this.pauseStartedAt = null
     this.pausedMs = 0
     this.phaseStartedAt = endedAt
-    this.remainingSecCached = this.phaseSec(next)
+    // 下一段用新的时长
+    this.segmentTotalSec = this.phaseSec(next)
+    this.remainingSecCached = this.segmentTotalSec
     this.emit()
 
     if (this.settings.autoStartNext) {

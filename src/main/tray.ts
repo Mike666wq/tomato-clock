@@ -3,6 +3,7 @@
 // 左键点击显示窗口，右键弹出菜单。关闭窗口不退出，只收进托盘。
 
 import { app, Menu, nativeImage, Tray, type BrowserWindow } from 'electron'
+import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { PHASE_LABEL, type TimerState } from '../shared/types'
 import { log } from './logger'
@@ -18,13 +19,32 @@ export interface TrayController {
   destroy: () => void
 }
 
+/**
+ * 托盘图标路径。开发时在项目 resources/，打包后有两种可能：
+ *   1) 被打进 app.asar → app.getAppPath()/resources
+ *   2) 作为 extraResources 放在 resources/ 目录 → process.resourcesPath/resources
+ * 两个都找一遍，找不到就用第一个（读不到会记日志，不静默）。
+ */
+function resolveIconPath(name: string): string {
+  const candidates = [
+    path.join(app.getAppPath(), 'resources', name),
+    path.join(process.resourcesPath, 'resources', name),
+    path.join(app.getAppPath(), '..', 'resources', name)
+  ]
+  for (const c of candidates) {
+    if (existsSync(c)) return c
+  }
+  log.error(`找不到托盘图标: ${name}（已尝试 ${candidates.length} 个路径）`)
+  return candidates[0]
+}
+
 function iconFile(state: TimerState): string {
   if (!state.running) return 'tray-paused-32.png'
   return state.phase === 'focus' ? 'tray-focus-32.png' : 'tray-break-32.png'
 }
 
 export function createTray(win: BrowserWindow, actions: TrayActions): TrayController {
-  const iconPath = (name: string): string => path.join(app.getAppPath(), 'resources', name)
+  const iconPath = (name: string): string => resolveIconPath(name)
 
   let tray: Tray
   try {

@@ -69,16 +69,17 @@ foreach ($size in @(16, 32)) {
   }
 }
 
-# ---------- 结束提示音：两个音的柔和提示（不用系统提示音） ----------
+# ---------- 结束提示音：三音上行、短促、带衰减（接近木琴，不用电子闹表那种双音） ----------
 function New-Ding([string]$path) {
   $sampleRate = 44100
+  # 三个音依次上行：A5 → D6 → G6
   $tones = @(
-    @{ freq = 880.0; dur = 0.16; gain = 0.55 },
-    @{ freq = 1174.7; dur = 0.42; gain = 0.45 }
+    @{ freq = 880.0; dur = 0.13; gain = 0.42 },
+    @{ freq = 1174.66; dur = 0.13; gain = 0.36 },
+    @{ freq = 1567.98; dur = 0.34; gain = 0.30 }
   )
   $total = 0.0
   foreach ($t in $tones) { $total += $t.dur }
-  $total += 0.05
   $n = [int]($total * $sampleRate)
   $samples = New-Object 'double[]' $n
 
@@ -87,9 +88,11 @@ function New-Ding([string]$path) {
     $len = [int]($t.dur * $sampleRate)
     for ($i = 0; $i -lt $len; $i++) {
       $tt = $i / $sampleRate
-      # 指数衰减 + 短促起音，听着干净不刺耳
-      $env = [math]::Exp(-4.0 * $tt) * [math]::Min(1.0, $tt / 0.004)
-      $samples[$pos + $i] = $t.gain * $env * [math]::Sin(2 * [math]::PI * $t.freq * $tt)
+      # 快衰减 + 极短起音，像被敲了一下
+      $env = [math]::Exp(-16.0 * $tt) * [math]::Min(1.0, $tt / 0.0025)
+      # 基频 + 一点点二次谐波，木琴那种有木头味
+      $s = [math]::Sin(2 * [math]::PI * $t.freq * $tt) + 0.22 * [math]::Sin(4 * [math]::PI * $t.freq * $tt)
+      $samples[$pos + $i] = $t.gain * $env * $s
     }
     $pos += $len
   }
@@ -119,5 +122,73 @@ function New-Ding([string]$path) {
 }
 
 New-Ding (Join-Path $res 'ding.wav')
+
+# ---------- 应用图标：256 PNG + ICO（打包用） ----------
+function New-AppIcon([string]$pngPath, [string]$icoPath, [int]$size) {
+  $bmp = New-Object System.Drawing.Bitmap $size, $size
+  $g = [System.Drawing.Graphics]::FromImage($bmp)
+  $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+  $g.Clear([System.Drawing.Color]::Transparent)
+
+  # 深色圆角底
+  $bg = [System.Drawing.ColorTranslator]::FromHtml('#0E1013')
+  $radius = [float]($size * 0.22)
+  $path = New-Object System.Drawing.Drawing2D.GraphicsPath
+  $d = [float]($size * 0.06)
+  $path.AddArc([float]$d, [float]$d, $radius, $radius, 180, 90)
+  $path.AddArc([float]($size - $d - $radius), [float]$d, $radius, $radius, 270, 90)
+  $path.AddArc([float]($size - $d - $radius), [float]($size - $d - $radius), $radius, $radius, 0, 90)
+  $path.AddArc([float]$d, [float]($size - $d - $radius), $radius, $radius, 90, 90)
+  $path.CloseFigure()
+  $g.FillPath((New-Object System.Drawing.SolidBrush $bg), $path)
+
+  # 番茄
+  $body = [System.Drawing.ColorTranslator]::FromHtml('#FF6B57')
+  $stem = [System.Drawing.ColorTranslator]::FromHtml('#5AC49B')
+  $brush = New-Object System.Drawing.SolidBrush $body
+  $g.FillEllipse($brush, [float]($size * 0.22), [float]($size * 0.30), [float]($size * 0.56), [float]($size * 0.56))
+  $brush.Dispose()
+
+  $stemBrush = New-Object System.Drawing.SolidBrush $stem
+  $cx = [float]($size / 2)
+  $tipY = [float]($size * 0.12)
+  $pts = New-Object 'System.Drawing.PointF[]' 3
+  $pts[0] = New-Object System.Drawing.PointF ([float]($cx - $size * 0.05)), $tipY
+  $pts[1] = New-Object System.Drawing.PointF $cx, ([float]($tipY + $size * 0.12))
+  $pts[2] = New-Object System.Drawing.PointF ([float]($cx + $size * 0.05)), $tipY
+  $g.FillPolygon($stemBrush, $pts)
+  $pen = New-Object System.Drawing.Pen $stem, ([float][math]::Max(2, $size * 0.045))
+  $pen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
+  $pen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+  $g.DrawLine($pen, $cx, [float]($size * 0.25), [float]($cx - $size * 0.15), [float]($size * 0.17))
+  $g.DrawLine($pen, $cx, [float]($size * 0.25), [float]($cx + $size * 0.15), [float]($size * 0.17))
+  $pen.Dispose()
+  $stemBrush.Dispose()
+  $g.Dispose()
+
+  $bmp.Save($pngPath, [System.Drawing.Imaging.ImageFormat]::Png)
+
+  # ICO：把 PNG 原样塞进去（Vista+ 支持 PNG 压缩的 ICO 图标）
+  $pngBytes = [System.IO.File]::ReadAllBytes($pngPath)
+  $ico = New-Object 'System.Collections.Generic.List[byte]'
+  $ico.AddRange([System.BitConverter]::GetBytes([int16]0))
+  $ico.AddRange([System.BitConverter]::GetBytes([int16]1))
+  $ico.AddRange([System.BitConverter]::GetBytes([int16]1))
+  $ico.AddRange([System.BitConverter]::GetBytes([byte]0))
+  $ico.AddRange([System.BitConverter]::GetBytes([byte]0))
+  $ico.AddRange([System.BitConverter]::GetBytes([byte]0))
+  $ico.AddRange([System.BitConverter]::GetBytes([byte]0))
+  $ico.AddRange([System.BitConverter]::GetBytes([int16]1))
+  $ico.AddRange([System.BitConverter]::GetBytes([int16]32))
+  $ico.AddRange([System.BitConverter]::GetBytes([int16]32))
+  $ico.AddRange([System.BitConverter]::GetBytes([int]$pngBytes.Length))
+  $ico.AddRange([System.BitConverter]::GetBytes([int]22))
+  $ico.AddRange($pngBytes)
+  [System.IO.File]::WriteAllBytes($icoPath, $ico.ToArray())
+
+  $bmp.Dispose()
+}
+
+New-AppIcon (Join-Path $res 'icon.png') (Join-Path $res 'icon.ico') 256
 
 Get-ChildItem $res | Select-Object Name, Length | Format-Table -AutoSize

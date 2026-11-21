@@ -3,7 +3,16 @@
 // 计时状态由主进程持有，这里只做两件事：读快照、发动作。
 
 import { contextBridge, ipcRenderer } from 'electron'
-import type { InterruptKind, Notice, RecordSummary, Session, TimerState } from '../shared/types'
+import type {
+  InterruptKind,
+  Notice,
+  RecordSummary,
+  Session,
+  Settings,
+  ShortcutDef,
+  StatsData,
+  TimerState
+} from '../shared/types'
 
 const api = {
   timer: {
@@ -72,7 +81,19 @@ const api = {
     }
   },
   settings: {
-    get: (): Promise<{ volume: number; soundOn: boolean }> => ipcRenderer.invoke('settings:get')
+    get: (): Promise<Settings> => ipcRenderer.invoke('settings:get'),
+    save: (patch: Partial<Settings>): void => ipcRenderer.send('settings:save', patch)
+  },
+  stats: {
+    get: (): Promise<StatsData> => ipcRenderer.invoke('stats:get')
+  },
+  shortcuts: {
+    get: (): Promise<ShortcutDef[]> => ipcRenderer.invoke('shortcuts:get'),
+    set: (id: ShortcutDef['id'], accelerator: string): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke('shortcuts:set', id, accelerator)
+  },
+  csv: {
+    export: (): Promise<{ ok: boolean; path?: string }> => ipcRenderer.invoke('csv:export')
   },
   window: {
     minimize: (): void => ipcRenderer.send('window:minimize'),
