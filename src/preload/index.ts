@@ -3,7 +3,7 @@
 // 计时状态由主进程持有，这里只做两件事：读快照、发动作。
 
 import { contextBridge, ipcRenderer } from 'electron'
-import type { TimerState } from '../shared/types'
+import type { InterruptKind, Notice, RecordSummary, Session, TimerState } from '../shared/types'
 
 const api = {
   timer: {
@@ -20,6 +20,59 @@ const api = {
         ipcRenderer.removeListener('timer:state', listener)
       }
     }
+  },
+  records: {
+    /** 今日番茄数 / 今日专注时长 / 历史总时长 */
+    summary: (): Promise<RecordSummary> => ipcRenderer.invoke('records:summary'),
+    /** 提交一条记录（任务名 + 打断类型） */
+    submit: (id: string, task: string, interrupt: InterruptKind): void =>
+      ipcRenderer.send('records:submit', id, task, interrupt),
+    onSummary: (cb: (s: RecordSummary) => void): (() => void) => {
+      const listener = (_e: unknown, s: RecordSummary): void => cb(s)
+      ipcRenderer.on('records:summary', listener)
+      return () => {
+        ipcRenderer.removeListener('records:summary', listener)
+      }
+    },
+    /** 主进程要求打开记录卡片 */
+    onOpen: (cb: (session: Session) => void): (() => void) => {
+      const listener = (_e: unknown, s: Session): void => cb(s)
+      ipcRenderer.on('record:open', listener)
+      return () => {
+        ipcRenderer.removeListener('record:open', listener)
+      }
+    },
+    onClose: (cb: () => void): (() => void) => {
+      const listener = (): void => cb()
+      ipcRenderer.on('record:close', listener)
+      return () => {
+        ipcRenderer.removeListener('record:close', listener)
+      }
+    }
+  },
+  reminder: {
+    /** 结束提醒：窗口已置顶，这里负责声音 + 边框闪烁 */
+    onFire: (cb: (payload: { title: string; body: string }) => void): (() => void) => {
+      const listener = (_e: unknown, p: { title: string; body: string }): void => cb(p)
+      ipcRenderer.on('reminder:fire', listener)
+      return () => {
+        ipcRenderer.removeListener('reminder:fire', listener)
+      }
+    }
+  },
+  notice: {
+    /** 取走攒着的通知（推送早于界面订阅时用） */
+    take: (): Promise<Notice[]> => ipcRenderer.invoke('notice:take'),
+    onShow: (cb: (n: Notice) => void): (() => void) => {
+      const listener = (_e: unknown, n: Notice): void => cb(n)
+      ipcRenderer.on('notice:show', listener)
+      return () => {
+        ipcRenderer.removeListener('notice:show', listener)
+      }
+    }
+  },
+  settings: {
+    get: (): Promise<{ volume: number; soundOn: boolean }> => ipcRenderer.invoke('settings:get')
   },
   window: {
     minimize: (): void => ipcRenderer.send('window:minimize'),

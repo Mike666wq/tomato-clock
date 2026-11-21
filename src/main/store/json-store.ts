@@ -54,6 +54,18 @@ export const jsonStore: Store = {
     data.sessions.push(session)
     await writeRaw(data)
   },
+  async updateSession(id, patch) {
+    const data = await readRaw()
+    const hit = data.sessions.find((s) => s.id === id)
+    if (hit) {
+      Object.assign(hit, patch)
+      await writeRaw(data)
+    }
+  },
+  async listSessions() {
+    const data = await readRaw()
+    return data.sessions
+  },
   async getSettings() {
     const data = await readRaw()
     return data.settings

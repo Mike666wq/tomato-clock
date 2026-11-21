@@ -27,6 +27,7 @@ export type Session = {
   endedAt: string // ISO
   plannedSec: number
   actualSec: number // 实际专注秒数（暂停要扣掉）
+  pausedSec?: number // 这一段里累计暂停的秒数
   completed: boolean // 是否自然走完
   task: string // 任务名，可空
   interrupt: InterruptKind
@@ -41,10 +42,41 @@ export type TimerState = {
   totalSec: number
   /** 当前阶段剩余秒数 */
   remainingSec: number
+  /** 当前阶段已实际运行的秒数（不含暂停时间） */
+  activeSec: number
   /** 本轮已完成多少个专注 */
   focusRounds: number
   /** 每个阶段跑完的次数（专注/短休/长休），用于统计 */
   completed: { focus: number; short: number; long: number }
+}
+
+/** 一个阶段自然跑完时，主进程交给界面与存储层的信息 */
+export type PhaseCompleteInfo = {
+  phase: PhaseKind
+  plannedSec: number
+  /** 实际运行秒数，已扣掉暂停时间 */
+  actualSec: number
+  /** 这一段里累计暂停了多少秒 */
+  pausedSec: number
+  startedAt: string
+  endedAt: string
+}
+
+/** 底部状态行用的汇总 */
+export type RecordSummary = {
+  /** 今日完成的专注个数 */
+  todayCount: number
+  /** 今日专注总秒数 */
+  todayFocusSec: number
+  /** 历史专注总秒数 */
+  totalFocusSec: number
+}
+
+/** 一次性提示（快捷键注册失败等） */
+export type Notice = {
+  id: string
+  text: string
+  tone: 'info' | 'warn'
 }
 
 /** 本地存储文件的整体结构 */

@@ -19,8 +19,8 @@ export interface TrayController {
 }
 
 function iconFile(state: TimerState): string {
-  if (!state.running) return 'tray-paused.png'
-  return state.phase === 'focus' ? 'tray-focus.png' : 'tray-break.png'
+  if (!state.running) return 'tray-paused-32.png'
+  return state.phase === 'focus' ? 'tray-focus-32.png' : 'tray-break-32.png'
 }
 
 export function createTray(win: BrowserWindow, actions: TrayActions): TrayController {
@@ -28,7 +28,7 @@ export function createTray(win: BrowserWindow, actions: TrayActions): TrayContro
 
   let tray: Tray
   try {
-    tray = new Tray(nativeImage.createFromPath(iconPath('tray-focus.png')))
+    tray = new Tray(nativeImage.createFromPath(iconPath('tray-focus-32.png')))
   } catch (err) {
     log.error(`创建托盘失败: ${(err as Error).message}`)
     return { update: () => {}, destroy: () => {} }
@@ -58,6 +58,7 @@ export function createTray(win: BrowserWindow, actions: TrayActions): TrayContro
     running: false,
     totalSec: 0,
     remainingSec: 0,
+    activeSec: 0,
     focusRounds: 0,
     completed: { focus: 0, short: 0, long: 0 }
   }

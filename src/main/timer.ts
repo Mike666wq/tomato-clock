@@ -3,17 +3,15 @@
 // 状态归主进程持有（方案第八节风险表最后一条）：
 // 窗口关掉、界面重开、甚至应用退到托盘，计时都照常走。
 // 渲染层只通过 IPC 读快照、发动作，不持有任何计时状态。
+//
+// 时间口径：
+//   remainingSec  倒计时剩余秒数，暂停时冻结
+//   activeSec     本阶段实际"跑起来"的秒数，暂停期间不增长
+//   actualSec     阶段结束时写进记录的秒数 = 已跑秒数（已扣掉暂停）
 
-import { PHASE_LABEL, type PhaseKind, type Settings, type TimerState } from '../shared/types'
+import { PHASE_LABEL, type PhaseKind, type PhaseCompleteInfo, type Settings, type TimerState } from '../shared/types'
 
 export type TimerAction = 'toggle' | 'start' | 'pause' | 'skip' | 'reset'
-
-export type TimerEvents = {
-  /** 计时状态变化 */
-  onState: (state: TimerState) => void
-  /** 一个阶段自然跑完（用于第 3 轮的强提醒与记录弹窗） */
-  onPhaseComplete: (phase: PhaseKind) => void
-}
 
 export class Timer {
   private settings: Settings
@@ -25,7 +23,14 @@ export class Timer {
   private ticker: NodeJS.Timeout | null = null
   private lastEmittedSec = -1
   private listeners = new Set<(s: TimerState) => void>()
-  private phaseListeners = new Set<(p: PhaseKind) => void>()
+  private phaseListeners = new Set<(p: PhaseCompleteInfo) => void>()
+
+  /** 当前阶段开始时刻（墙钟） */
+  private phaseStartedAt = Date.now()
+  /** 当前阶段累计暂停毫秒 */
+  private pausedMs = 0
+  /** 本次暂停的开始时刻 */
+  private pauseStartedAt: number | null = null
 
   constructor(settings: Settings) {
     this.settings = settings
@@ -34,6 +39,9 @@ export class Timer {
     if (import.meta.env.DEV) {
       this.devSeed = (phase?: PhaseKind, elapsedSec = 0): void => {
         if (phase) this.phase = phase
+        this.phaseStartedAt = Date.now()
+        this.pausedMs = 0
+        this.pauseStartedAt = null
         this.remainingSecCached = Math.max(0, this.phaseSec(this.phase) - elapsedSec)
         this.running = false
         this.endsAt = null
@@ -47,11 +55,14 @@ export class Timer {
   // ---------- 对外接口 ----------
 
   getState(): TimerState {
+    const total = this.phaseSec(this.phase)
+    const remaining = this.remainingSec()
     return {
       phase: this.phase,
       running: this.running,
-      totalSec: this.phaseSec(this.phase),
-      remainingSec: this.remainingSec(),
+      totalSec: total,
+      remainingSec: remaining,
+      activeSec: Math.max(0, total - remaining),
       focusRounds: this.focusRounds,
       completed: { ...this.completed }
     }
@@ -63,7 +74,7 @@ export class Timer {
     return () => this.listeners.delete(fn)
   }
 
-  onPhaseComplete(fn: (p: PhaseKind) => void): () => void {
+  onPhaseComplete(fn: (info: PhaseCompleteInfo) => void): () => void {
     this.phaseListeners.add(fn)
     return () => this.phaseListeners.delete(fn)
   }
@@ -104,7 +115,6 @@ export class Timer {
     this.ticker = null
   }
 
-
   // ---------- 内部实现 ----------
 
   private remainingSecCached = 0
@@ -129,6 +139,11 @@ export class Timer {
     this.remainingSecCached = this.remainingSecCached || this.phaseSec(this.phase)
     this.endsAt = Date.now() + this.remainingSecCached * 1000
     this.running = true
+    // 恢复计时：把这次暂停的时长累计进去
+    if (this.pauseStartedAt !== null) {
+      this.pausedMs += Date.now() - this.pauseStartedAt
+      this.pauseStartedAt = null
+    }
     this.lastEmittedSec = -1
     this.ensureTicker()
     this.emit()
@@ -139,12 +154,16 @@ export class Timer {
     this.remainingSecCached = this.remainingSec()
     this.running = false
     this.endsAt = null
+    this.pauseStartedAt = Date.now()
     this.emit()
   }
 
   private reset(): void {
     this.running = false
     this.endsAt = null
+    this.pauseStartedAt = null
+    this.pausedMs = 0
+    this.phaseStartedAt = Date.now()
     this.remainingSecCached = this.phaseSec(this.phase)
     this.emit()
   }
@@ -175,12 +194,29 @@ export class Timer {
   /** 推进到下一阶段。completed=true 表示这一段是自然跑完的 */
   private advance(completed: boolean): void {
     const finished = this.phase
+    const plannedSec = this.phaseSec(finished)
+    const endedAt = Date.now()
+
     if (completed) {
       this.completed[finished] += 1
       if (finished === 'focus') {
         this.focusRounds += 1
       }
-      this.phaseListeners.forEach((fn) => fn(finished))
+      // 实际跑起来的秒数：倒计时只在"跑"的时候走，所以
+      // 实际秒数 = 计划 - 剩余（此刻剩余已归零），暂停时间不进这个数
+      const actualSec = Math.max(0, plannedSec - this.remainingSec())
+      const pausedSec = Math.round(
+        (this.pausedMs + (this.pauseStartedAt ? endedAt - this.pauseStartedAt : 0)) / 1000
+      )
+      const info: PhaseCompleteInfo = {
+        phase: finished,
+        plannedSec,
+        actualSec,
+        pausedSec,
+        startedAt: new Date(this.phaseStartedAt).toISOString(),
+        endedAt: new Date(endedAt).toISOString()
+      }
+      this.phaseListeners.forEach((fn) => fn(info))
     }
 
     // 阶段流转：专注 → (每 roundsBeforeLong 轮一次长休) 短休 → 专注
@@ -192,6 +228,9 @@ export class Timer {
     this.phase = next
     this.running = false
     this.endsAt = null
+    this.pauseStartedAt = null
+    this.pausedMs = 0
+    this.phaseStartedAt = endedAt
     this.remainingSecCached = this.phaseSec(next)
     this.emit()
 

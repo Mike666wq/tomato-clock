@@ -6,16 +6,19 @@
 import { useEffect, useRef, useState } from 'react'
 import { Ring } from '../components/Ring'
 import { Controls } from '../components/TimerControls'
-import { PHASE_LABEL, type TimerState } from '../../shared/types'
+import { PHASE_LABEL, type RecordSummary, type TimerState } from '../../shared/types'
 
 const FALLBACK: TimerState = {
   phase: 'focus',
   running: false,
   totalSec: 25 * 60,
   remainingSec: 25 * 60,
+  activeSec: 0,
   focusRounds: 0,
   completed: { focus: 0, short: 0, long: 0 }
 }
+
+const EMPTY_SUMMARY: RecordSummary = { todayCount: 0, todayFocusSec: 0, totalFocusSec: 0 }
 
 function format(sec: number): string {
   const m = Math.floor(sec / 60)
@@ -25,6 +28,7 @@ function format(sec: number): string {
 
 export function Timer(): React.JSX.Element {
   const [state, setState] = useState<TimerState>(FALLBACK)
+  const [summary, setSummary] = useState<RecordSummary>(EMPTY_SUMMARY)
   const [breathe, setBreathe] = useState(false)
   const wasRunning = useRef(false)
 
@@ -33,7 +37,13 @@ export function Timer(): React.JSX.Element {
     const api = window.pomodoro
     if (!api) return
     void api.timer.getState().then(setState)
-    return api.timer.onState(setState)
+    void api.records.summary().then(setSummary)
+    const offState = api.timer.onState(setState)
+    const offSummary = api.records.onSummary(setSummary)
+    return () => {
+      offState()
+      offSummary()
+    }
   }, [])
 
   // 阶段属性挂在 html 根元素上，派生色（底轨、柔光）才能跟着换色
@@ -68,7 +78,8 @@ export function Timer(): React.JSX.Element {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  const focusMinutes = state.completed.focus * 25
+  const todayMin = Math.round(summary.todayFocusSec / 60)
+  const totalMin = Math.round(summary.totalFocusSec / 60)
 
   return (
     <div className="main">
@@ -82,8 +93,8 @@ export function Timer(): React.JSX.Element {
       <Controls running={state.running} onToggle={toggle} onSkip={skip} onReset={reset} />
 
       <div className="status">
-        <span className="status__dot">●</span> 已完成 {state.focusRounds} 个番茄 · 专注累计{' '}
-        {focusMinutes} 分钟
+        <span className="status__dot">●</span> 今日 {summary.todayCount} 个番茄 · 今日专注 {todayMin} 分钟 ·
+        累计 {totalMin} 分钟
       </div>
     </div>
   )

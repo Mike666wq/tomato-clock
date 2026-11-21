@@ -21,7 +21,7 @@ export function setupScreenshot(win: BrowserWindow): void {
   const shoot = async (): Promise<void> => {
     try {
       // 等首帧渲染完再截，否则可能拍到空白
-      await new Promise((r) => setTimeout(r, 1500))
+      await new Promise((r) => setTimeout(r, 3000))
       const image = await win.webContents.capturePage()
       await fs.mkdir(path.dirname(target), { recursive: true })
       await fs.writeFile(target, image.toPNG())
