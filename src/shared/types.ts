@@ -33,6 +33,21 @@ export type Session = {
   interruptNote?: string
 }
 
+/** 计时状态快照：主进程持有，界面只读 */
+export type TimerState = {
+  phase: PhaseKind
+  running: boolean
+  /** 当前阶段总秒数 */
+  totalSec: number
+  /** 当前阶段剩余秒数 */
+  remainingSec: number
+  /** 本轮已完成多少个专注 */
+  focusRounds: number
+  /** 每个阶段跑完的次数（专注/短休/长休），用于统计 */
+  completed: { focus: number; short: number; long: number }
+}
+
+/** 本地存储文件的整体结构 */
 export type AppData = {
   schemaVersion: number
   settings: Settings
@@ -48,7 +63,7 @@ export const DEFAULT_SETTINGS: Settings = {
   soundOn: true,
   volume: 0.6,
   launchAtLogin: false,
-  window: { w: 480, h: 620 }
+  window: { w: 480, h: 580 }
 }
 
 export const PHASE_LABEL: Record<PhaseKind, string> = {

@@ -18,6 +18,8 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS
 export function Ring({ total, remaining, breathe, children }: RingProps): React.JSX.Element {
   const progress = total > 0 ? Math.min(1, Math.max(0, 1 - remaining / total)) : 0
   const dashOffset = CIRCUMFERENCE * (1 - progress)
+  // 进度 0% 时不要留一个孤零零的圆头
+  const visible = progress > 0.0005
 
   return (
     <div className={breathe ? 'ring ring--breathe' : 'ring'}>
@@ -30,6 +32,7 @@ export function Ring({ total, remaining, breathe, children }: RingProps): React.
           r={RADIUS}
           strokeDasharray={CIRCUMFERENCE}
           strokeDashoffset={dashOffset}
+          strokeOpacity={visible ? 1 : 0}
         />
       </svg>
       <div className="ring__center">{children}</div>

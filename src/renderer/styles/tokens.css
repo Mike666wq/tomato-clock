@@ -14,14 +14,15 @@
   --ink: #edeff2; /* 主文字 */
   --ink-2: #9aa1ac; /* 次要文字 */
   --accent: #ff6b57; /* 专注态主色（番茄红） */
-  --break: #4fd1a5; /* 休息态主色 */
+  --break: #5ac49b; /* 休息态主色：降饱和、往暖里拉，别和番茄红不像一家 */
   --warn: #f5b942; /* 被打断 / 超时 */
 
   /* ---- 派生色（随阶段变化） ---- */
   --phase: var(--accent);
   --phase-soft: color-mix(in srgb, var(--phase) 16%, transparent);
   --phase-faint: color-mix(in srgb, var(--phase) 7%, transparent);
-  --track: color-mix(in srgb, var(--phase) 15%, var(--line));
+  /* 底轨保持中性灰，不染相位色；氛围靠底色柔光，不靠把轨道染色 */
+  --track: color-mix(in srgb, var(--ink) 8%, var(--line));
   --on-phase: var(--bg); /* 落在主色块上的文字色 */
 
   /* ---- 表面 ---- */
@@ -50,6 +51,7 @@
   --fs-label: 13px;
   --fs-body: 14px;
   --fs-small: 12px;
+  --fs-tiny: 11px; /* 圆环内的状态小标签 */
 
   /* ---- 动效 ---- */
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
