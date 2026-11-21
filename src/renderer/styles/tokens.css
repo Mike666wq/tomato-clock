@@ -1,0 +1,74 @@
+/*
+ * tokens.css —— 主题的唯一入口。
+ *
+ * 规则：整个渲染层不允许出现任何硬编码色值/像素值，
+ * 需要新颜色或新尺寸，先在这里加变量，再在组件里用 var() 引用。
+ * 派生色一律用 color-mix 基于上面的基础色推导，不引入新色相。
+ */
+
+:root {
+  /* ---- 基础色板（方案第五节） ---- */
+  --bg: #0e1013; /* 窗口底色 */
+  --surface: #171a1f; /* 卡片 / 浮层 */
+  --line: #24282f; /* 分隔线、描边 */
+  --ink: #edeff2; /* 主文字 */
+  --ink-2: #9aa1ac; /* 次要文字 */
+  --accent: #ff6b57; /* 专注态主色（番茄红） */
+  --break: #4fd1a5; /* 休息态主色 */
+  --warn: #f5b942; /* 被打断 / 超时 */
+
+  /* ---- 派生色（随阶段变化） ---- */
+  --phase: var(--accent);
+  --phase-soft: color-mix(in srgb, var(--phase) 16%, transparent);
+  --phase-faint: color-mix(in srgb, var(--phase) 7%, transparent);
+  --track: color-mix(in srgb, var(--phase) 15%, var(--line));
+  --on-phase: var(--bg); /* 落在主色块上的文字色 */
+
+  /* ---- 表面 ---- */
+  --surface-2: color-mix(in srgb, var(--surface) 55%, var(--bg));
+  --hover: color-mix(in srgb, var(--ink) 7%, transparent);
+  --active: color-mix(in srgb, var(--ink) 12%, transparent);
+
+  /* ---- 尺寸 ---- */
+  --ring-size: 320px;
+  --ring-stroke: 8px;
+  --titlebar-h: 44px;
+  --pad-x: 24px;
+
+  /* ---- 圆角 ---- */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 18px;
+  --r-pill: 999px;
+
+  /* ---- 字体 ---- */
+  --font-ui: system-ui, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  --font-num: 'Segoe UI Variable Display', 'Segoe UI Light', 'Segoe UI', system-ui, sans-serif;
+
+  /* ---- 字号 ---- */
+  --fs-time: 92px; /* 大数字 88–96px */
+  --fs-label: 13px;
+  --fs-body: 14px;
+  --fs-small: 12px;
+
+  /* ---- 动效 ---- */
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 150ms;
+  --dur-base: 200ms;
+  --dur-slow: 250ms;
+}
+
+/* 换阶段 → 换整个界面的色调。
+ *
+ * 注意：这里必须作用在 html 根元素上。因为 --track / --phase-soft 这些派生色
+ * 声明在 :root，var() 替换用的是"声明所在元素"上的 --phase 值。
+ * 如果阶段属性挂在子元素上，派生色会永远按 :root 的默认色（专注红）算，
+ * 底轨不会跟着换色。 */
+html[data-phase='focus'] {
+  --phase: var(--accent);
+}
+
+html[data-phase='short'],
+html[data-phase='long'] {
+  --phase: var(--break);
+}

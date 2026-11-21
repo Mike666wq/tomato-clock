@@ -1,0 +1,249 @@
+/* 应用级样式。所有色值/尺寸一律引用 tokens.css 里的变量。 */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: var(--fs-body);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  user-select: none;
+  cursor: default;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+/* ---------- 应用外壳 ---------- */
+
+.app {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  /* 一层极淡的阶段色光晕，给深色底一点温度，不做渐变彩虹 */
+  background:
+    radial-gradient(120% 62% at 50% 34%, var(--phase-faint) 0%, transparent 70%),
+    var(--bg);
+  transition: background var(--dur-slow) var(--ease);
+}
+
+/* ---------- 自绘标题栏 ---------- */
+
+.titlebar {
+  display: flex;
+  align-items: center;
+  height: var(--titlebar-h);
+  padding-left: var(--pad-x);
+  flex: 0 0 auto;
+  -webkit-app-region: drag;
+}
+
+.titlebar__title {
+  font-size: var(--fs-small);
+  letter-spacing: 0.08em;
+  color: var(--ink-2);
+}
+
+.titlebar__actions {
+  display: flex;
+  align-self: stretch;
+  margin-left: auto;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar__btn {
+  width: 46px;
+  display: grid;
+  place-items: center;
+  color: var(--ink-2);
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+
+.titlebar__btn:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.titlebar__btn--close:hover {
+  background: var(--accent);
+  color: var(--on-phase);
+}
+
+/* ---------- 主区域 ---------- */
+
+.main {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px var(--pad-x) 20px;
+  min-height: 0;
+}
+
+.phase-label {
+  font-size: var(--fs-label);
+  letter-spacing: 0.22em;
+  text-indent: 0.22em;
+  color: var(--phase);
+  transition: color var(--dur-slow) var(--ease);
+  margin: 8px 0 18px;
+}
+
+/* ---------- 圆环 ---------- */
+
+.ring {
+  position: relative;
+  width: var(--ring-size);
+  height: var(--ring-size);
+  flex: 0 0 auto;
+}
+
+.ring__svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  transform: rotate(-90deg);
+}
+
+.ring__track {
+  fill: none;
+  stroke: var(--track);
+  stroke-width: var(--ring-stroke);
+  transition: stroke var(--dur-slow) var(--ease);
+}
+
+.ring__progress {
+  fill: none;
+  stroke: var(--phase);
+  stroke-width: var(--ring-stroke);
+  stroke-linecap: round;
+  /* 连续走，不是每秒一跳 */
+  transition: stroke-dashoffset 1s linear, stroke var(--dur-slow) var(--ease);
+}
+
+.ring--breathe .ring__progress {
+  animation: breathe 420ms var(--ease);
+}
+
+@keyframes breathe {
+  0% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.012);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.ring__center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.ring__time {
+  font-family: var(--font-num);
+  font-size: var(--fs-time);
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  /* 等宽数字：数字跳动时不会左右抖 */
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+  color: var(--ink);
+}
+
+.ring__hint {
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+  letter-spacing: 0.04em;
+}
+
+/* ---------- 按钮 ---------- */
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 34px;
+}
+
+.btn {
+  height: 44px;
+  padding: 0 22px;
+  border-radius: var(--r-md);
+  font-size: var(--fs-body);
+  letter-spacing: 0.06em;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn--primary {
+  min-width: 116px;
+  background: var(--phase);
+  color: var(--on-phase);
+  font-weight: 500;
+  transition: background var(--dur-slow) var(--ease), color var(--dur-slow) var(--ease),
+    transform var(--dur-fast) var(--ease);
+}
+
+.btn--primary:hover {
+  background: color-mix(in srgb, var(--phase) 86%, var(--ink));
+}
+
+.btn--ghost {
+  min-width: 84px;
+  color: var(--ink-2);
+  border: 1px solid var(--line);
+}
+
+.btn--ghost:hover {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--ink) 22%, var(--line));
+  background: var(--hover);
+}
+
+/* ---------- 底部状态 ---------- */
+
+.status {
+  margin-top: auto;
+  padding-top: 18px;
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+  letter-spacing: 0.03em;
+  text-align: center;
+}
+
+.status__dot {
+  color: var(--phase);
+  transition: color var(--dur-slow) var(--ease);
+}
