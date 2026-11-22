@@ -1,0 +1,87 @@
+name: build
+
+# 什么时候跑：
+#   - 推到 master：出一份可下载的构建产物（不建 Release）
+#   - 推 v* 标签：额外创建一个 Release，包挂在 Release 里
+#   - 手动点：Actions 页面点 Run workflow
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # 媒体控制小工具要用 .NET 8 的 WinRT 投影编译
+      - name: 安装 .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      # 类型检查不阻断打包：它是开发期卫生问题，不该让用户拿不到包
+      - name: 类型检查（不阻断）
+        continue-on-error: true
+        run: pnpm typecheck
+
+      - name: 打包（编译 smtc.exe + electron-builder）
+        env:
+          # 没有代码签名证书，明确关掉自动查找，避免打包卡在签名步骤
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: pnpm dist
+
+      - name: 打免安装压缩包（从 win-unpacked 打，跟本地一致）
+        run: |
+          $v = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if (Test-Path release\win-unpacked) {
+            Compress-Archive -Path release\win-unpacked\* -DestinationPath "release\番茄钟-$v-免安装.zip" -Force
+            Write-Host "已生成 release\番茄钟-$v-免安装.zip"
+          } else {
+            Write-Host "没有 win-unpacked，跳过压缩包"
+          }
+
+      - name: 列出产物
+        run: Get-ChildItem release -Recurse -File | Select-Object FullName, @{n='MB';e={[math]::Round($_.Length/1MB,1)}}
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: tomato-clock-windows
+          path: |
+            release/*.exe
+            release/*.zip
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: 建 Release（只在打标签时）
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/*.exe
+            release/*.zip
+          generate_release_notes: true
+          fail_on_unmatched_files: false
