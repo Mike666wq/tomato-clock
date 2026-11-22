@@ -325,6 +325,16 @@ html[data-paused='1'] .island__clock {
   font-size: var(--fs-tiny);
 }
 
+/* 「本段」标记（灵动岛选项行）：选中的主题和这一段实际挂的主题不一致时才出现 */
+.island__opt-tag {
+  margin-left: 4px;
+  font-style: normal;
+  font-size: 9px;
+  line-height: 1;
+  color: var(--ink-2);
+  opacity: 0.8;
+}
+
 /* ---- 音乐控制行（v0.2.2） ----
    展开态最下面一行：♪ 歌名 - 歌手 + 上一首/播放暂停/下一首。
    收起态不显示这一行。歌名太长就截断加省略号，不能撑破胶囊。 */

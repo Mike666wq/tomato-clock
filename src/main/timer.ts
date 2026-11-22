@@ -50,6 +50,11 @@ export class Timer {
     this.cfg = cfg
     this.remainingSecCached = this.phaseSec('focus')
     this.segmentTotalSec = this.remainingSecCached
+    // 第一段也要挂上当前选中的主题。
+    // 之前漏了这一行：segmentTopicId 默认 null，而它只在 updateSettings / reset / advance
+    // 里才被赋值，于是"每次启动应用后的第一个专注段"永远记成未分类，
+    // 用户明明在设置里选着主题，跑完一看记录还是未分类。
+    this.segmentTopicId = cfg.topicId
 
     if (import.meta.env.DEV) {
       this.devSeed = (phase?: PhaseKind, elapsedSec = 0): void => {

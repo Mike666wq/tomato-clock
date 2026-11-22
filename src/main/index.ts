@@ -446,6 +446,13 @@ if (!app.requestSingleInstanceLock()) {
       island?.setMode(mode, withMusic)
     )
     ipcMain.on('island:open-main', () => showWindow())
+    // 就地编辑任务名之前，让浮层真的拿到键盘焦点（否则字符打到主窗口里）
+    ipcMain.on('island:focus', () => {
+      const win = island?.win
+      if (!win || win.isDestroyed()) return
+      win.focus()
+      win.webContents.focus()
+    })
 
     // 音乐控制（v0.2.2）：状态从 SMTC 子进程来，命令也是发给它
     ipcMain.handle('media:get-state', () => music?.getState() ?? null)

@@ -155,7 +155,10 @@ export function Timer(): React.JSX.Element {
         {settings ? (
           <TopicBar
             topics={settings.topics ?? []}
-            activeId={state.topicId ?? null}
+            /* 高亮跟"用户选中的"走（settings.activeTopicId），不跟"这一段正在用的"走。
+               切主题只影响下一段，用 state.topicId 做高亮会让人以为点了没反应。 */
+            activeId={settings.activeTopicId ?? null}
+            currentId={state.topicId ?? null}
             onPick={(id) => window.pomodoro?.settings.save({ activeTopicId: id })}
           />
         ) : null}

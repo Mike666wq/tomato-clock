@@ -33,7 +33,9 @@ const api = {
       else ipcRenderer.send('island:set-mode', mode)
     },
     /** 打开主窗口（完整界面） */
-    openMain: (): void => ipcRenderer.send('island:open-main')
+    openMain: (): void => ipcRenderer.send('island:open-main'),
+    /** 主动要键盘焦点（就地编辑任务名之前必须调，否则输入跑到主窗口去了） */
+    focus: (): void => ipcRenderer.send('island:focus')
   },
   media: {
     /** 当前在放什么；null = 没有音乐在放 */

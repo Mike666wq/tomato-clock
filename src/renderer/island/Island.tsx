@@ -109,14 +109,21 @@ export default function Island(): React.JSX.Element {
       window.clearTimeout(openTimer.current)
       openTimer.current = null
     }
+    // 正在写任务名时不许收起：之前这里没判断，鼠标一离开 400ms 岛就缩回去，
+    // 输入框跟着消失，用户点进去刚开始打字就全没了。
+    if (editingTask) return
     if (closeTimer.current) window.clearTimeout(closeTimer.current)
     closeTimer.current = window.setTimeout(() => setMode(false), HOVER_CLOSE_MS)
-  }, [setMode])
+  }, [setMode, editingTask])
 
-  // Esc：先收回第二层，再收起整个岛
+  // Esc：编辑中先取消编辑；否则先收回第二层，再收起整个岛
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== 'Escape') return
+      if (editingTask) {
+        setEditingTask(false)
+        return
+      }
       if (layer !== 'idle') {
         setLayer('idle')
         return
@@ -125,7 +132,7 @@ export default function Island(): React.JSX.Element {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [layer, setMode])
+  }, [layer, setMode, editingTask])
 
   useEffect(
     () => () => {
@@ -163,6 +170,13 @@ export default function Island(): React.JSX.Element {
   const startEditTask = (): void => {
     setTaskDraft(state?.task ?? '')
     setEditingTask(true)
+    // 岛是常驻置顶的浮层，不一定持有键盘焦点；不主动要一次焦点，
+    // 打进去的字符会跑到下面的主窗口去。主进程那边 win.focus() + webContents.focus()。
+    if (closeTimer.current) {
+      window.clearTimeout(closeTimer.current)
+      closeTimer.current = null
+    }
+    window.island?.island.focus()
   }
 
   const commitTask = (): void => {
@@ -175,7 +189,20 @@ export default function Island(): React.JSX.Element {
   const percent = state && state.totalSec > 0 ? Math.min(100, (state.activeSec / state.totalSec) * 100) : 0
 
   const activePreset = (settings?.presets ?? []).find((p) => p.id === settings?.activePresetId)
-  const activeTopic = (settings?.topics ?? []).find((t) => t.id === (state?.topicId ?? null))
+
+  /**
+   * 主题要显示「用户选中的那个」，不是「这一段正在用的那个」。
+   *
+   * 切主题按设计只影响下一段，所以 state.topicId 在跑着的时候不会变。
+   * 之前这里用 state.topicId，用户点了「未分类」→ activeTopicId 存进去了，
+   * 但界面高亮纹丝不动，看起来就是"点了没反应"。
+   *
+   * 现在：高亮跟 settings.activeTopicId（选中的）；正在跑的这段用的是哪个，
+   * 用一个小「本段」标记单独标出来，两者不同时用户才看得懂发生了什么。
+   */
+  const selectedTopicId = settings?.activeTopicId ?? null
+  const runningTopicId = state?.topicId ?? null
+  const activeTopic = (settings?.topics ?? []).find((t) => t.id === selectedTopicId)
 
   if (!expanded) {
     return (
@@ -204,6 +231,11 @@ export default function Island(): React.JSX.Element {
       onMouseLeave={onLeave}
       onClick={() => {
         // 展开态点空白：收回第二层。第一层点空白还是"开始/暂停"（整条岛是大号开关）
+        // 正在写任务名时点空白 = 结束编辑并提交，别顺手把计时也切了
+        if (editingTask) {
+          commitTask()
+          return
+        }
         if (layer !== 'idle') setLayer('idle')
         else toggle()
       }}
@@ -301,13 +333,18 @@ export default function Island(): React.JSX.Element {
       ) : layer === 'topics' ? (
         <span className="island__opts">
           <button
-            className={!activeTopic ? 'island__opt island__opt--on' : 'island__opt'}
+            className={
+              selectedTopicId === null ? 'island__opt island__opt--on' : 'island__opt'
+            }
             onClick={(e) => {
               e.stopPropagation()
               pickTopic(null)
             }}
           >
             未分类
+            {runningTopicId !== selectedTopicId && runningTopicId === null ? (
+              <em className="island__opt-tag">本段</em>
+            ) : null}
           </button>
           {[...(settings?.topics ?? [])]
             .filter((t) => !t.archived)
@@ -315,9 +352,7 @@ export default function Island(): React.JSX.Element {
             .map((t) => (
               <button
                 key={t.id}
-                className={
-                  t.id === (state?.topicId ?? null) ? 'island__opt island__opt--on' : 'island__opt'
-                }
+                className={t.id === selectedTopicId ? 'island__opt island__opt--on' : 'island__opt'}
                 onClick={(e) => {
                   e.stopPropagation()
                   pickTopic(t.id)
@@ -325,6 +360,10 @@ export default function Island(): React.JSX.Element {
               >
                 <i style={{ background: t.color }} />
                 {t.name}
+                {/* 正在跑的这段挂的是这个主题，但用户已经选了别的 → 标一下，别让人以为没生效 */}
+                {runningTopicId === t.id && runningTopicId !== selectedTopicId ? (
+                  <em className="island__opt-tag">本段</em>
+                ) : null}
               </button>
             ))}
         </span>

@@ -940,6 +940,20 @@ button {
   flex: none;
 }
 
+/* 「本段」标记：只有"选中的主题"和"这一段正在用的主题"不一致时才出现。
+   告诉用户"你刚切的那个下一段才生效，现在跑的这段还是这个"。 */
+.topics__tag {
+  margin-left: 5px;
+  padding: 0 4px;
+  font-style: normal;
+  font-size: 9px;
+  line-height: 14px;
+  color: var(--ink-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  opacity: 0.85;
+}
+
 .topic-list {
   display: flex;
   flex-direction: column;
