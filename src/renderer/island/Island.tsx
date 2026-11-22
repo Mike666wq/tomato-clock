@@ -326,7 +326,7 @@ export default function Island(): React.JSX.Element {
         </span>
       )}
 
-      <span className="island__bar">
+      <span className="island__bar" style={{ opacity: percent > 0 ? 1 : 0.5 }}>
         <i style={{ width: `${percent}%` }} />
       </span>
     </div>

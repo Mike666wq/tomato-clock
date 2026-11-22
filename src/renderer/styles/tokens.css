@@ -55,9 +55,11 @@
 
   /* ---- 灵动岛（屏幕顶端悬浮胶囊） ---- */
   /* 伪毛玻璃四层：半透明底 + 噪点 + 高光/暗边 + 内阴影（缺一层就不像玻璃）
-     底色是 rgba(44,44,44,0.95)：0.9 时壁纸的泡沫/水反差会透出纹理（实测有效不透明度
-     0.895，波浪纹看得见），0.95 之后不管壁纸明暗，岛都是近黑的 */
-  --island-bg: rgba(34, 34, 34, 0.95);
+     底色是 rgba(34,34,34,0.97)：不透明度再高一点，人眼在暗部对壁纸的低频纹理
+     特别敏感，0.95 时还能认出那是泡沫还是水纹；磨砂感靠噪点和高光，不靠真透明 */
+  --island-bg: rgba(34, 34, 34, 0.97);
+  /* 胶囊内再压一层由上到下的暗色渐变，把透过来的纹理彻底压住 */
+  --island-shade: linear-gradient(to bottom, rgba(0, 0, 0, 0.25), rgba(0, 0, 0, 0.45));
   --island-edge: color-mix(in srgb, var(--ink) 8%, transparent);
   --island-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
   --island-hairline: rgba(255, 255, 255, 0.1);
@@ -85,7 +87,7 @@
   --island-bar-h: 2px;
   --island-bar-inset: 18px;
   --island-bar-bottom: 8px;
-  --island-track: color-mix(in srgb, var(--ink) 10%, transparent);
+  --island-track: color-mix(in srgb, var(--ink) 12%, transparent);
 
   /* ---- 动效 ---- */
   --ease: cubic-bezier(0.4, 0, 0.2, 1);

@@ -53,7 +53,9 @@ const list = exprs.length
 // CDP_TARGET 可以指定挑哪个页面：'main'（主窗口）/ 'island'（灵动岛），其余按子串匹配
 const want = process.env.CDP_TARGET ?? ''
 const pages = (await targets()).filter(
-  (t) => t.type === 'page' && (t.url.includes('5173') || t.url.includes('index.html'))
+  (t) =>
+    t.type === 'page' &&
+    (t.url.includes('5173') || t.url.includes('index.html') || t.url.includes('island.html'))
 )
 const pathOf = (t) => {
   try {

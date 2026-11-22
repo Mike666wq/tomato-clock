@@ -38,7 +38,7 @@ body {
   align-items: center;
   justify-content: center;
   gap: var(--island-gap);
-  background: var(--island-bg);
+  background: var(--island-shade), var(--island-bg);
   border: 1px solid var(--island-edge);
   /* 上边留一条透明边框：视觉上还是"没有上边线"（贴着屏幕顶端），
      但内容盒和视觉盒一样高，内容不会偏上 0.5px */
