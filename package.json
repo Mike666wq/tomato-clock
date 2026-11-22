@@ -9,7 +9,7 @@
     "dev": "node scripts/dev.mjs",
     "start": "electron-vite preview",
     "build": "electron-vite build",
-    "dist": "node scripts/prepare-smtc.mjs && electron-vite build && electron-builder --win --x64",
+    "dist": "node scripts/prepare-smtc.mjs && electron-vite build && electron-builder --win --x64 --publish never",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json"
   },
   "build": {    "appId": "com.local.pomodoro",
