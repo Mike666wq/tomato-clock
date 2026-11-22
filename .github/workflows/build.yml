@@ -55,7 +55,8 @@ jobs:
         env:
           # 没有代码签名证书，明确关掉自动查找，避免打包卡在签名步骤
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-          DEBUG: electron-builder
+          # 只留错误级 debug，全量 DEBUG 会让日志变成几千行，摘要里全是噪音
+          DEBUG: 'electron-builder*@error'
         run: |
           pnpm dist 2>&1 | Tee-Object -FilePath dist.log
           if ($LASTEXITCODE -ne 0) {
