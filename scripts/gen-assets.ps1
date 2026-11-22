@@ -124,8 +124,8 @@ function New-Ding([string]$path) {
 New-Ding (Join-Path $res 'ding.wav')
 
 # ---------- 应用图标：256 PNG + ICO（打包用） ----------
-function New-AppIcon([string]$pngPath, [string]$icoPath, [int]$size) {
-  $bmp = New-Object System.Drawing.Bitmap $size, $size
+function Draw-AppIcon([System.Drawing.Bitmap]$bmp) {
+  $size = $bmp.Width
   $g = [System.Drawing.Graphics]::FromImage($bmp)
   $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
   $g.Clear([System.Drawing.Color]::Transparent)
@@ -165,30 +165,54 @@ function New-AppIcon([string]$pngPath, [string]$icoPath, [int]$size) {
   $pen.Dispose()
   $stemBrush.Dispose()
   $g.Dispose()
-
-  $bmp.Save($pngPath, [System.Drawing.Imaging.ImageFormat]::Png)
-
-  # ICO：把 PNG 原样塞进去（Vista+ 支持 PNG 压缩的 ICO 图标）
-  $pngBytes = [System.IO.File]::ReadAllBytes($pngPath)
-  $ico = New-Object 'System.Collections.Generic.List[byte]'
-  $ico.AddRange([System.BitConverter]::GetBytes([int16]0))
-  $ico.AddRange([System.BitConverter]::GetBytes([int16]1))
-  $ico.AddRange([System.BitConverter]::GetBytes([int16]1))
-  $ico.AddRange([System.BitConverter]::GetBytes([byte]0))
-  $ico.AddRange([System.BitConverter]::GetBytes([byte]0))
-  $ico.AddRange([System.BitConverter]::GetBytes([byte]0))
-  $ico.AddRange([System.BitConverter]::GetBytes([byte]0))
-  $ico.AddRange([System.BitConverter]::GetBytes([int16]1))
-  $ico.AddRange([System.BitConverter]::GetBytes([int16]32))
-  $ico.AddRange([System.BitConverter]::GetBytes([int16]32))
-  $ico.AddRange([System.BitConverter]::GetBytes([int]$pngBytes.Length))
-  $ico.AddRange([System.BitConverter]::GetBytes([int]22))
-  $ico.AddRange($pngBytes)
-  [System.IO.File]::WriteAllBytes($icoPath, $ico.ToArray())
-
-  $bmp.Dispose()
 }
 
-New-AppIcon (Join-Path $res 'icon.png') (Join-Path $res 'icon.ico') 256
+# ICO 目录项里写的是每个图标的真实尺寸，256 要写成 0（约定值），
+# 之前写成 32 却塞了 256 的 PNG，resedit 解析时直接炸。
+function New-AppIcon([string]$pngPath, [string]$icoPath) {
+  $sizes = @(16, 32, 48, 64, 128, 256)
+  $images = @()
+
+  foreach ($s in $sizes) {
+    $bmp = New-Object System.Drawing.Bitmap $s, $s
+    Draw-AppIcon $bmp
+    $ms = New-Object System.IO.MemoryStream
+    $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
+    $bytes = $ms.ToArray()
+    $ms.Dispose()
+    $bmp.Dispose()
+    $images += ,@{ size = $s; data = $bytes }
+    if ($s -eq 256) {
+      [System.IO.File]::WriteAllBytes($pngPath, $bytes)
+    }
+  }
+
+  $ico = New-Object 'System.Collections.Generic.List[byte]'
+  # ICONDIR
+  $ico.AddRange([System.BitConverter]::GetBytes([int16]0))   # reserved
+  $ico.AddRange([System.BitConverter]::GetBytes([int16]1))   # type: icon
+  $ico.AddRange([System.BitConverter]::GetBytes([int16]$images.Count))
+
+  $offset = 6 + 16 * $images.Count
+  foreach ($img in $images) {
+    $w = if ($img.size -ge 256) { [byte]0 } else { [byte]$img.size }
+    $h = if ($img.size -ge 256) { [byte]0 } else { [byte]$img.size }
+    $ico.Add($w)                                          # width
+    $ico.Add($h)                                          # height
+    $ico.Add([byte]0)                                     # color count
+    $ico.Add([byte]0)                                     # reserved
+    $ico.AddRange([System.BitConverter]::GetBytes([int16]1))   # planes
+    $ico.AddRange([System.BitConverter]::GetBytes([int16]32))  # bit count
+    $ico.AddRange([System.BitConverter]::GetBytes([int]$img.data.Length))
+    $ico.AddRange([System.BitConverter]::GetBytes([int]$offset))
+    $offset += $img.data.Length
+  }
+  foreach ($img in $images) {
+    $ico.AddRange($img.data)
+  }
+  [System.IO.File]::WriteAllBytes($icoPath, $ico.ToArray())
+}
+
+New-AppIcon (Join-Path $res 'icon.png') (Join-Path $res 'icon.ico')
 
 Get-ChildItem $res | Select-Object Name, Length | Format-Table -AutoSize

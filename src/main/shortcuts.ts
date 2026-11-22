@@ -4,6 +4,7 @@
 
 import { globalShortcut } from 'electron'
 import { log } from './logger'
+import { formatAccelerator } from '../shared/format'
 
 export type ShortcutId = 'toggle' | 'show'
 
@@ -34,6 +35,11 @@ export function getShortcuts(): ShortcutDef[] {
   }))
 }
 
+/** 给人看的写法（界面上不要出现 CommandOrControl 这种原始字符串） */
+export function getShortcutLabels(): Array<ShortcutDef & { display: string }> {
+  return getShortcuts().map((s) => ({ ...s, display: formatAccelerator(s.accelerator, process.platform) }))
+}
+
 export function registerShortcuts(h: Record<ShortcutId, () => void>): string[] {
   handlers.toggle = h.toggle
   handlers.show = h.show
@@ -61,16 +67,17 @@ export function replaceShortcut(id: ShortcutId, accelerator: string): { ok: bool
   const old = current[id]
   const handler = handlers[id]
   if (!handler) return { ok: false, error: '该快捷键还没有绑定处理函数' }
+  const display = formatAccelerator(accelerator, process.platform)
 
   try {
     globalShortcut.unregister(old)
     if (globalShortcut.register(accelerator, handler)) {
       current[id] = accelerator
-      log.info(`全局快捷键已改: ${LABELS[id]} → ${accelerator}`)
+      log.info(`全局快捷键已改: ${LABELS[id]} → ${display}`)
       return { ok: true }
     }
     globalShortcut.register(old, handler)
-    return { ok: false, error: `${accelerator} 注册失败，可能被其他程序占用` }
+    return { ok: false, error: `${display} 注册失败，可能被其他程序占用` }
   } catch (err) {
     globalShortcut.register(old, handler)
     return { ok: false, error: (err as Error).message }

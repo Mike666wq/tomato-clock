@@ -2,16 +2,17 @@
   "name": "pomodoro",
   "version": "0.1.0",
   "description": "自用 Windows 桌面番茄钟",
+  "author": "小M",
   "private": true,
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "start": "electron-vite preview",
     "build": "electron-vite build",
+    "dist": "electron-vite build && electron-builder --win --x64",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json"
   },
-  "build": {
-    "appId": "com.local.pomodoro",
+  "build": {    "appId": "com.local.pomodoro",
     "productName": "番茄钟",
     "directories": { "output": "release" },
     "files": ["out/**/*", "resources/**/*", "package.json"],
@@ -33,6 +34,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.3.0",
     "electron": "^45.4.1",
+    "electron-builder": "^26.18.0",
     "electron-vite": "^6.0.0",
     "typescript": "^5.9.3",
     "vite": "^8.3.8"

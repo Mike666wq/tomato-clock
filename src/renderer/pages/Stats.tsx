@@ -42,6 +42,10 @@ function HourChart({ data }: { data: number[] }): React.JSX.Element {
           {h}
         </text>
       ))}
+      {/* 右端补一个 24，不然最后一格悬空 */}
+      <text x={W} y={H - 4} className="chart__label" textAnchor="end">
+        24
+      </text>
     </svg>
   )
 }
@@ -62,6 +66,7 @@ function TrendChart({ data }: { data: StatsData['last7Days'] }): React.JSX.Eleme
         const isToday = i === data.length - 1
         return (
           <g key={d.date}>
+            {/* 没数据的日期什么都不画，只留 x 轴标签 */}
             {d.focusSec > 0 ? (
               <rect
                 x={x}
@@ -71,9 +76,7 @@ function TrendChart({ data }: { data: StatsData['last7Days'] }): React.JSX.Eleme
                 rx={1.5}
                 className={isToday ? 'chart__bar chart__bar--today' : 'chart__bar chart__bar--muted'}
               />
-            ) : (
-              <rect x={x} y={baseY - 2} width={barW} height={2} rx={1} className="chart__bar chart__bar--muted" />
-            )}
+            ) : null}
             <text x={i * slot + slot / 2} y={H - 4} className="chart__label" textAnchor="middle">
               {d.label}
             </text>
@@ -102,16 +105,19 @@ function InterruptChart({ data }: { data: StatsData['interrupts'] }): React.JSX.
             <text x={0} y={y + 13} className="chart__label chart__label--left">
               {d.label}
             </text>
-            <rect x={labelW} y={y + 3} width={trackW} height={12} rx={2} className="chart__track" />
+            {/* 0 值不画条，只留标签和数字 */}
             {d.count > 0 ? (
-              <rect
-                x={labelW}
-                y={y + 3}
-                width={Math.max(3, w)}
-                height={12}
-                rx={2}
-                className={d.kind === 'none' ? 'chart__bar chart__bar--muted' : 'chart__bar'}
-              />
+              <>
+                <rect x={labelW} y={y + 3} width={trackW} height={12} rx={2} className="chart__track" />
+                <rect
+                  x={labelW}
+                  y={y + 3}
+                  width={Math.max(3, w)}
+                  height={12}
+                  rx={2}
+                  className={d.kind === 'none' ? 'chart__bar chart__bar--muted' : 'chart__bar'}
+                />
+              </>
             ) : null}
             <text x={W} y={y + 14} className="chart__value" textAnchor="end">
               {d.count}
@@ -168,6 +174,7 @@ export function Stats(): React.JSX.Element {
         <div>
           <div className="stats__num">{minutes(data.totalFocusSec)}</div>
           <div className="stats__cap">累计专注（分钟）</div>
+          <div className="stats__sub">含历史</div>
         </div>
       </div>
 

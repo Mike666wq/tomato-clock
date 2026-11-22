@@ -347,6 +347,13 @@ button {
   color: var(--ink-2);
 }
 
+.stats__sub {
+  margin-top: 2px;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  color: color-mix(in srgb, var(--ink-2) 70%, transparent);
+}
+
 .stats__empty {
   flex: 1;
   display: grid;
@@ -663,13 +670,14 @@ button {
 
 .record-card__actions {
   display: flex;
+  align-items: stretch;
   gap: 10px;
   margin-top: 16px;
 }
 
-/* 两个按钮等高，视觉分量一致 */
+/* 两个按钮等高：拉伸 + 明确高度，描边按钮不能看着矮一截 */
 .record-card__actions .btn {
-  height: 42px;
+  height: 44px;
   padding: 0 18px;
 }
 

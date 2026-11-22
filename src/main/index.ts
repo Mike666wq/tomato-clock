@@ -11,7 +11,7 @@ import { setupScreenshot } from './screenshot'
 import { Timer, type TimerAction } from './timer'
 import { createTray, type TrayController } from './tray'
 import { createReminder, type ReminderController } from './reminder'
-import { getShortcuts, registerShortcuts, replaceShortcut, type ShortcutId } from './shortcuts'
+import { getShortcutLabels, registerShortcuts, replaceShortcut, type ShortcutId } from './shortcuts'
 import { buildStats } from './stats'
 import { exportCsv } from './csv'
 import { log } from './logger'
@@ -25,6 +25,7 @@ import {
   type Session,
   type Settings
 } from '../shared/types'
+import { formatAccelerator } from '../shared/format'
 
 // 必须与 src/renderer/styles/tokens.css 的 --bg 保持一致。
 // 渲染层所有颜色只允许在 tokens.css 里出现，这里是唯一的例外（窗口底色，
@@ -228,8 +229,8 @@ function registerAllShortcuts(): void {
     show: () => showWindow()
   })
   for (const acc of failed) {
-    // 光写日志用户看不见，要推到界面上
-    pushNotice(`快捷键 ${acc} 注册失败，可能被其他程序占用`, 'warn')
+    // 光写日志用户看不见，要推到界面上（用给人看的写法）
+    pushNotice(`快捷键 ${formatAccelerator(acc, process.platform)} 注册失败，可能被其他程序占用`, 'warn')
   }
 }
 
@@ -316,7 +317,7 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.handle('stats:get', async () => buildStats(await jsonStore.listSessions()))
 
     // 快捷键：查看与改键（失败走同一条提示链路）
-    ipcMain.handle('shortcuts:get', () => getShortcuts())
+    ipcMain.handle('shortcuts:get', () => getShortcutLabels())
     ipcMain.handle('shortcuts:set', (_e, id: ShortcutId, accelerator: string) => {
       const res = replaceShortcut(id, accelerator)
       if (!res.ok) {

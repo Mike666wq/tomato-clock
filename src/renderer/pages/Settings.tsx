@@ -58,8 +58,9 @@ export function SettingsPage({ onNotice }: Props): React.JSX.Element {
       setCapturing(null)
       void window.pomodoro?.shortcuts.set(id, acc).then((res) => {
         if (res.ok) {
-          setShortcuts((prev) => prev.map((s) => (s.id === id ? { ...s, accelerator: acc } : s)))
-          onNotice(`快捷键已改为 ${acc}`)
+          // 重新拉一份，display 由主进程按平台生成
+          void window.pomodoro?.shortcuts.get().then(setShortcuts)
+          onNotice('快捷键已修改')
         }
         // 失败由主进程走提示条链路，这里不用重复提示
       })
@@ -196,7 +197,7 @@ export function SettingsPage({ onNotice }: Props): React.JSX.Element {
           <div className="field" key={s.id}>
             <label>{s.label}</label>
             <button className="field__key" onClick={() => startCapture(s.id)}>
-              {capturing === s.id ? '按下组合键…' : s.accelerator}
+              {capturing === s.id ? '按下组合键…' : s.display}
             </button>
           </div>
         ))}

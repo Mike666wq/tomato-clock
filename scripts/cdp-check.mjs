@@ -49,7 +49,10 @@ const list = exprs.length
       "document.querySelector('.ring__hint')?.textContent"
     ]
 
-const pages = (await targets()).filter((t) => t.type === 'page' && t.url.includes('5173'))
+// 开发模式渲染页是 http://localhost:5173/，安装版是 file:// 下的 index.html
+const pages = (await targets()).filter(
+  (t) => t.type === 'page' && (t.url.includes('5173') || t.url.includes('index.html'))
+)
 if (!pages.length) {
   console.log('NO_PAGE_TARGET')
   process.exit(1)

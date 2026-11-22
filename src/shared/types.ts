@@ -101,6 +101,8 @@ export type StatsData = {
 export type ShortcutDef = {
   id: 'toggle' | 'show'
   accelerator: string
+  /** 给人看的写法，如 "Ctrl + Alt + Space" */
+  display: string
   label: string
 }
 

@@ -1,0 +1,10 @@
+packages:
+  - .
+
+# pnpm 11 的构建脚本白名单。
+# electron 的 postinstall 要跑（下载 238MB 的运行时二进制）。
+# electron-winstaller 只服务于 Squirrel 打包器，这个项目用 NSIS + 免安装 zip，
+# 用不到它的脚本，明确关掉，免得 pnpm 每次都报 IGNORED_BUILDS 并返回非 0。
+allowBuilds:
+  electron: true
+  electron-winstaller: false
