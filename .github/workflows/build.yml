@@ -47,11 +47,24 @@ jobs:
         continue-on-error: true
         run: pnpm typecheck
 
+      # 用 pwsh 跑，把输出同时写进文件；失败时把末尾贴到构建摘要里。
+      # GitHub 的 Actions 日志要登录才能看，摘要页不用——出问题能直接从外部读到原因。
       - name: 打包（编译 smtc.exe + electron-builder）
+        id: dist
+        shell: pwsh
         env:
           # 没有代码签名证书，明确关掉自动查找，避免打包卡在签名步骤
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: pnpm dist
+          DEBUG: electron-builder
+        run: |
+          pnpm dist 2>&1 | Tee-Object -FilePath dist.log
+          if ($LASTEXITCODE -ne 0) {
+            "## 打包失败，最后 150 行" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            "``````" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            Get-Content dist.log -Tail 150 | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            "``````" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            exit 1
+          }
 
       - name: 打免安装压缩包（从 win-unpacked 打，跟本地一致）
         run: |
