@@ -248,3 +248,46 @@ html[data-paused='1'] .island__clock {
   color: var(--ink-2);
   font-size: var(--island-fs-task);
 }
+
+/* ---- 主题（v0.3-b）：灵动岛第二行 ---- */
+
+.island__topics {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+  padding-left: var(--island-pad-x);
+  overflow: hidden;
+}
+
+.island__topic {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 8px;
+  font-size: var(--fs-tiny);
+  color: var(--ink-2);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.island__topic > i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.island__topic:hover {
+  color: var(--ink);
+  background: var(--hover);
+}
+
+.island__topic--on {
+  color: var(--ink);
+  border-color: var(--ink-2);
+  background: var(--active);
+}

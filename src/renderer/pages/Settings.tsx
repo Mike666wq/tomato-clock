@@ -3,12 +3,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { keyCapture } from '../keyCapture'
 import { PresetManager } from '../components/PresetManager'
+import { TopicManager } from '../components/TopicManager'
 import { BUILTIN_PRESETS } from '../../shared/presets'
 import type { Settings, ShortcutDef } from '../../shared/types'
 
 const DEFAULTS: Settings = {
   activePresetId: 'builtin-classic',
   presets: BUILTIN_PRESETS.map((p) => ({ ...p })),
+  topics: [],
+  activeTopicId: null,
   autoStartNext: false,
   soundOn: true,
   volume: 0.5,
@@ -96,6 +99,14 @@ export function SettingsPage({ onNotice }: Props): React.JSX.Element {
         activeId={settings.activePresetId}
         onPresets={(presets) => patch({ presets })}
         onActivate={(id) => patch({ activePresetId: id })}
+        onNotice={onNotice}
+      />
+
+      <TopicManager
+        topics={settings.topics ?? []}
+        activeId={settings.activeTopicId ?? null}
+        onTopics={(topics) => patch({ topics })}
+        onActivate={(id) => patch({ activeTopicId: id })}
         onNotice={onNotice}
       />
 

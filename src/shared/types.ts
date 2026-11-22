@@ -2,8 +2,9 @@
 // 这里只放"数据形状"，不放任何业务逻辑。
 
 import { BUILTIN_PRESETS, DEFAULT_PRESET_ID, type Preset, type TimerConfig } from './presets'
+import { type Topic } from './topics'
 
-export type { Preset, TimerConfig }
+export type { Preset, TimerConfig, Topic }
 
 /** 计时阶段 */
 export type PhaseKind = 'focus' | 'short' | 'long'
@@ -16,6 +17,10 @@ export type Settings = {
   activePresetId: string
   /** 所有模板：内置四个 + 自定义的 */
   presets: Preset[]
+  /** 所有主题（v0.3-b）。首次启动不预置，用户自己建 */
+  topics: Topic[]
+  /** 当前主题；为空 = 未分类（允许不选，不强制） */
+  activeTopicId: string | null
   autoStartNext: boolean // 默认 false（自用先不自动，避免被迫开始）
   soundOn: boolean
   volume: number // 0-1
@@ -38,6 +43,10 @@ export type Session = {
   task: string // 任务名，可空
   interrupt: InterruptKind
   interruptNote?: string
+  /** 挂在哪个主题上（v0.3-b）。为空 = 未分类；休息段不挂 */
+  topicId?: string
+  /** 记录当时的主题名，改名后历史仍可读 */
+  topicNameSnapshot?: string
 }
 
 /** 计时状态快照：主进程持有，界面只读 */
@@ -54,6 +63,10 @@ export type TimerState = {
   focusRounds: number
   /** 每个阶段跑完的次数（专注/短休/长休），用于统计 */
   completed: { focus: number; short: number; long: number }
+  /** 当前这一段挂在哪个主题上（v0.3-b）。中途切主题不改变它 */
+  topicId: string | null
+  /** 用户当前选中的主题（切它只影响下一段） */
+  activeTopicId: string | null
 }
 
 /** 一个阶段自然跑完时，主进程交给界面与存储层的信息 */
@@ -85,6 +98,23 @@ export type Notice = {
   tone: 'info' | 'warn'
 }
 
+/** 一个主题的统计（v0.3-b） */
+export type TopicStat = {
+  topicId: string | null
+  name: string
+  color: string
+  /** 完成了几个番茄 */
+  rounds: number
+  /** 总专注秒数 */
+  totalSec: number
+  /** 平均每回合秒数 */
+  avgSec: number
+  /** 打断率：被打断的回合占比（0–1） */
+  interruptRate: number
+  /** 时间占比（0–1），同一口径下总和为 1 */
+  share: number
+}
+
 /** 统计页需要的数据，由主进程算好 */
 export type StatsData = {
   /** 今日完成的番茄数 */
@@ -99,6 +129,18 @@ export type StatsData = {
   last7Days: Array<{ date: string; label: string; focusSec: number }>
   /** 打断原因排行 */
   interrupts: Array<{ kind: InterruptKind; label: string; count: number }>
+  /** 主题维度排行：本周 / 全部两个口径 */
+  topicStats: { week: TopicStat[]; all: TopicStat[] }
+  /** 今日概览：今天涉及几个主题、几个番茄，按主题分组 */
+  todayTopics: Array<{
+    topicId: string | null
+    name: string
+    color: string
+    rounds: number
+    totalSec: number
+  }>
+  /** 今天涉及的主题个数 */
+  todayTopicCount: number
   /** 全部记录 */
   sessions: Session[]
 }
@@ -122,6 +164,8 @@ export type AppData = {
 export const DEFAULT_SETTINGS: Settings = {
   activePresetId: DEFAULT_PRESET_ID,
   presets: BUILTIN_PRESETS.map((p) => ({ ...p })),
+  topics: [],
+  activeTopicId: null,
   autoStartNext: false,
   soundOn: true,
   volume: 0.5,
@@ -145,7 +189,8 @@ export function timerConfigOf(settings: Settings): TimerConfig {
     shortMin: src.shortMin,
     longMin: src.longMin,
     roundsBeforeLong: src.roundsBeforeLong,
-    autoStartNext: settings.autoStartNext
+    autoStartNext: settings.autoStartNext,
+    topicId: settings.activeTopicId
   }
 }
 

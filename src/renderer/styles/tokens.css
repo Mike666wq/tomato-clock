@@ -67,7 +67,7 @@
   --island-noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
   --island-w: 172px;
   --island-h: 34px;
-  --island-h-expanded: 76px;
+  --island-h-expanded: 104px;
   --island-radius: 17px; /* 收起态下沿做半圆（半高 17px），最像灵动岛 */
   --island-radius-expanded: 20px; /* 展开态半高 38px 太大，像面包 */
   --island-side-pad: 8px;

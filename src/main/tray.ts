@@ -88,7 +88,9 @@ export function createTray(win: BrowserWindow, actions: TrayActions): TrayContro
     remainingSec: 0,
     activeSec: 0,
     focusRounds: 0,
-    completed: { focus: 0, short: 0, long: 0 }
+    completed: { focus: 0, short: 0, long: 0 },
+    topicId: null,
+    activeTopicId: null
   }
 
   const refresh = (): void => {

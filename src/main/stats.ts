@@ -2,7 +2,9 @@
 //
 // 放在主进程算，界面只负责画——日期口径只有一处，不会两边算出两个"今天"。
 
-import type { InterruptKind, Session, StatsData } from '../shared/types'
+import type { InterruptKind, Session, StatsData, TopicStat } from '../shared/types'
+import type { Topic } from '../shared/topics'
+import { UNTITLED } from '../shared/topics'
 
 export type { StatsData }
 
@@ -17,7 +19,62 @@ function localDateKey(d: Date): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
-export function buildStats(sessions: Session[]): StatsData {
+/** 本周一 0 点（本地） */
+function weekStart(): Date {
+  const d = new Date()
+  const day = d.getDay() // 0=周日
+  const diff = (day + 6) % 7 // 周一为 0
+  d.setDate(d.getDate() - diff)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
+type Bucket = {
+  rounds: number
+  totalSec: number
+  interrupted: number
+}
+
+/** 按主题聚合一组记录 */
+function groupByTopic(sessions: Session[], topics: Topic[]): Map<string | null, Bucket> {
+  const map = new Map<string | null, Bucket>()
+  for (const s of sessions) {
+    if (s.kind !== 'focus') continue
+    if (!s.completed) continue
+    const key = s.topicId ?? null
+    const b = map.get(key) ?? { rounds: 0, totalSec: 0, interrupted: 0 }
+    b.rounds += 1
+    b.totalSec += s.actualSec ?? 0
+    if (s.interrupt !== 'none') b.interrupted += 1
+    map.set(key, b)
+  }
+  void topics
+  return map
+}
+
+function toStats(buckets: Map<string | null, Bucket>, topics: Topic[]): TopicStat[] {
+  const list: TopicStat[] = []
+  for (const [topicId, b] of buckets) {
+    const topic = topics.find((t) => t.id === topicId)
+    list.push({
+      topicId,
+      name: topic?.name ?? (topicId ? UNTITLED : UNTITLED),
+      color: topic?.color ?? '#9aa1ac',
+      rounds: b.rounds,
+      totalSec: b.totalSec,
+      avgSec: b.rounds > 0 ? Math.round(b.totalSec / b.rounds) : 0,
+      interruptRate: b.rounds > 0 ? b.interrupted / b.rounds : 0,
+      share: 0
+    })
+  }
+  // 占比：同一口径下总和为 1
+  const total = list.reduce((sum, x) => sum + x.totalSec, 0)
+  for (const x of list) x.share = total > 0 ? x.totalSec / total : 0
+  list.sort((a, b) => b.totalSec - a.totalSec)
+  return list
+}
+
+export function buildStats(sessions: Session[], topics: Topic[] = []): StatsData {
   const todayKey = localDateKey(new Date())
 
   const todayByHour = new Array<number>(24).fill(0)
@@ -58,6 +115,32 @@ export function buildStats(sessions: Session[]): StatsData {
     })
   }
 
+  // 主题维度：本周 / 全部
+  const weekFrom = weekStart().getTime()
+  const weekSessions = sessions.filter((s) => new Date(s.startedAt).getTime() >= weekFrom)
+  const topicStats = {
+    week: toStats(groupByTopic(weekSessions, topics), topics),
+    all: toStats(groupByTopic(sessions, topics), topics)
+  }
+
+  // 今日概览：按主题分组
+  const todaySessions = sessions.filter(
+    (s) => s.kind === 'focus' && s.completed && localDateKey(new Date(s.startedAt)) === todayKey
+  )
+  const todayBuckets = groupByTopic(todaySessions, topics)
+  const todayTopics = [...todayBuckets.entries()]
+    .map(([topicId, b]) => {
+      const topic = topics.find((t) => t.id === topicId)
+      return {
+        topicId,
+        name: topic?.name ?? UNTITLED,
+        color: topic?.color ?? '#9aa1ac',
+        rounds: b.rounds,
+        totalSec: b.totalSec
+      }
+    })
+    .sort((a, b) => b.totalSec - a.totalSec)
+
   return {
     todayCount,
     todayFocusSec,
@@ -69,6 +152,9 @@ export function buildStats(sessions: Session[]): StatsData {
       label: INTERRUPT_LABELS[kind],
       count: interrupts[kind] ?? 0
     })),
+    topicStats,
+    todayTopics,
+    todayTopicCount: todayTopics.length,
     sessions
   }
 }

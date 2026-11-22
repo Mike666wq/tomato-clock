@@ -107,6 +107,15 @@ export default function Island(): React.JSX.Element {
     }
   }
 
+  /** 切主题：同一条规则，只影响下一段 */
+  const pickTopic = (id: string | null): void => {
+    window.island?.settings.save({ activeTopicId: id })
+    if (state?.running) {
+      setHint('下一段生效')
+      window.setTimeout(() => setHint(''), 2000)
+    }
+  }
+
   /**
    * 收起态单击 = 开始 / 暂停，不展开。
    * 点之前把"悬停展开"的定时器撤掉：否则点完 120ms 后它自己展开了，
@@ -229,6 +238,41 @@ export default function Island(): React.JSX.Element {
           </button>
         </span>
       </div>
+      <span className="island__topics">
+        {[...(settings?.topics ?? [])]
+          .filter((t) => !t.archived)
+          .sort((a, b) => a.order - b.order)
+          .slice(0, 6)
+          .map((t) => (
+            <button
+              key={t.id}
+              className={
+                t.id === (state?.topicId ?? null) ? 'island__topic island__topic--on' : 'island__topic'
+              }
+              onClick={(e) => {
+                e.stopPropagation()
+                pickTopic(t.id)
+              }}
+              title={`主题：${t.name}`}
+            >
+              <i style={{ background: t.color }} />
+              {t.name}
+            </button>
+          ))}
+        <button
+          className={
+          (state?.topicId ?? null) === null ? 'island__topic island__topic--on' : 'island__topic'
+        }
+          onClick={(e) => {
+            e.stopPropagation()
+            pickTopic(null)
+          }}
+          title="不归类到任何主题"
+        >
+          <i style={{ background: 'var(--ink-2)' }} />
+          未分类
+        </button>
+      </span>
       <span className="island__bar">
         <i style={{ width: `${percent}%` }} />
       </span>

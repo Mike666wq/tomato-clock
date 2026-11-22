@@ -153,8 +153,8 @@ export function PresetManager({ presets, activeId, onPresets, onActivate, onNoti
         ))}
       </div>
 
-      <button className="btn btn--ghost field__wide" onClick={() => open('new')}>
-        新建模板
+      <button className="btn btn--soft field__wide" onClick={() => open('new')}>
+        + 新建模板
       </button>
 
       {mode ? (

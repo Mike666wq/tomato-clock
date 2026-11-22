@@ -7,7 +7,7 @@ import { DEFAULT_SETTINGS, type AppData } from '../../shared/types'
 import { BUILTIN_PRESETS, DEFAULT_PRESET_ID, makePreset } from '../../shared/presets'
 import type { Store } from './index'
 
-const SCHEMA_VERSION = 2
+const SCHEMA_VERSION = 3
 
 function dataDir(): string {
   return app.getPath('userData')
@@ -27,47 +27,65 @@ function defaultData(): AppData {
  * v1 → v2：设置里的 focusMin / shortBreakMin / longBreakMin / roundsBeforeLong
  * 这四个散字段，打包成一个名叫"我的设置"的模板并设为当前模板，
  * 老用户打开还是原来的时长。顺便补上四个内置模板。
+ *
+ * v2 → v3：主题系统。历史记录没有主题 = 未分类，补上 topicNameSnapshot 空串。
  */
 function migrate(data: AppData): { data: AppData; changed: boolean } {
-  if (data.schemaVersion >= SCHEMA_VERSION) return { data, changed: false }
+  let changed = false
 
-  const legacy = data.settings as unknown as Record<string, unknown>
-  const presets = BUILTIN_PRESETS.map((p) => ({ ...p }))
-  let activePresetId = DEFAULT_PRESET_ID
+  if (data.schemaVersion < 2) {
+    const legacy = data.settings as unknown as Record<string, unknown>
+    const presets = BUILTIN_PRESETS.map((p) => ({ ...p }))
+    let activePresetId = DEFAULT_PRESET_ID
 
-  if (typeof legacy['focusMin'] === 'number') {
-    const mine = makePreset(
-      {
-        name: '我的设置',
-        focusMin: Number(legacy['focusMin']) || 25,
-        shortMin: Number(legacy['shortBreakMin']) || 5,
-        longMin: Number(legacy['longBreakMin']) || 15,
-        roundsBeforeLong: Number(legacy['roundsBeforeLong']) || 4
-      },
-      'preset-mine',
-      false,
-      presets.length
-    )
-    presets.push(mine)
-    activePresetId = mine.id
+    if (typeof legacy['focusMin'] === 'number') {
+      const mine = makePreset(
+        {
+          name: '我的设置',
+          focusMin: Number(legacy['focusMin']) || 25,
+          shortMin: Number(legacy['shortBreakMin']) || 5,
+          longMin: Number(legacy['longBreakMin']) || 15,
+          roundsBeforeLong: Number(legacy['roundsBeforeLong']) || 4
+        },
+        'preset-mine',
+        false,
+        presets.length
+      )
+      presets.push(mine)
+      activePresetId = mine.id
+    }
+
+    const {
+      focusMin: _f,
+      shortBreakMin: _s,
+      longBreakMin: _l,
+      roundsBeforeLong: _r,
+      ...rest
+    } = legacy as Record<string, unknown>
+
+    data.settings = {
+      ...DEFAULT_SETTINGS,
+      ...(rest as Partial<AppData['settings']>),
+      presets,
+      activePresetId
+    } as AppData['settings']
+    data.schemaVersion = 2
+    changed = true
   }
 
-  const {
-    focusMin: _f,
-    shortBreakMin: _s,
-    longBreakMin: _l,
-    roundsBeforeLong: _r,
-    ...rest
-  } = legacy as Record<string, unknown>
+  if (data.schemaVersion < 3) {
+    data.settings.topics = Array.isArray(data.settings.topics) ? data.settings.topics : []
+    data.settings.activeTopicId = data.settings.activeTopicId ?? null
+    data.sessions = data.sessions.map((s) => ({
+      ...s,
+      topicId: s.topicId,
+      topicNameSnapshot: s.topicNameSnapshot ?? ''
+    }))
+    data.schemaVersion = 3
+    changed = true
+  }
 
-  data.settings = {
-    ...DEFAULT_SETTINGS,
-    ...(rest as Partial<AppData['settings']>),
-    presets,
-    activePresetId
-  } as AppData['settings']
-  data.schemaVersion = SCHEMA_VERSION
-  return { data, changed: true }
+  return { data, changed }
 }
 
 async function readRaw(): Promise<AppData> {

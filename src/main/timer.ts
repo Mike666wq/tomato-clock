@@ -38,6 +38,11 @@ export class Timer {
   private pausedMs = 0
   /** 本次暂停的开始时刻 */
   private pauseStartedAt: number | null = null
+  /**
+   * 当前这一段挂在哪个主题上（v0.3-b）。
+   * 规则跟时长一样：中途切主题只影响下一段，当前段不变。
+   */
+  private segmentTopicId: string | null = null
 
   constructor(cfg: TimerConfig) {
     this.cfg = cfg
@@ -73,7 +78,9 @@ export class Timer {
       remainingSec: remaining,
       activeSec: Math.max(0, total - remaining),
       focusRounds: this.focusRounds,
-      completed: { ...this.completed }
+      completed: { ...this.completed },
+      topicId: this.segmentTopicId,
+      activeTopicId: this.cfg.topicId
     }
   }
 
@@ -106,6 +113,11 @@ export class Timer {
     if (notStarted && newTotal !== this.segmentTotalSec) {
       this.segmentTotalSec = newTotal
       this.remainingSecCached = newTotal
+      this.emit()
+    }
+    // 主题同一条规则：这一段还没开始跑 → 立刻用新主题；已经在跑 → 当前段不变，下一段生效
+    if (notStarted && this.segmentTopicId !== cfg.topicId) {
+      this.segmentTopicId = cfg.topicId
       this.emit()
     }
   }
@@ -187,6 +199,7 @@ export class Timer {
     this.phaseStartedAt = Date.now()
     this.segmentTotalSec = this.phaseSec(this.phase)
     this.remainingSecCached = this.segmentTotalSec
+    this.segmentTopicId = this.cfg.topicId
     this.emit()
   }
 
@@ -253,6 +266,8 @@ export class Timer {
     this.pauseStartedAt = null
     this.pausedMs = 0
     this.phaseStartedAt = endedAt
+    // 新的一段开始：主题用"此刻"选中的那个（用户可能刚在休息里切过）
+    this.segmentTopicId = this.cfg.topicId
     // 下一段用新的时长
     this.segmentTotalSec = this.phaseSec(next)
     this.remainingSecCached = this.segmentTotalSec

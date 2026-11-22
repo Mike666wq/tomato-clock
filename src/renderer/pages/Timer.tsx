@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Ring } from '../components/Ring'
 import { Controls } from '../components/TimerControls'
 import { PresetBar } from '../components/PresetBar'
+import { TopicBar } from '../components/TopicBar'
 import { keyCapture } from '../keyCapture'
 import { PHASE_LABEL, type RecordSummary, type Settings, type TimerState } from '../../shared/types'
 
@@ -17,7 +18,9 @@ const FALLBACK: TimerState = {
   remainingSec: 25 * 60,
   activeSec: 0,
   focusRounds: 0,
-  completed: { focus: 0, short: 0, long: 0 }
+  completed: { focus: 0, short: 0, long: 0 },
+  topicId: null,
+  activeTopicId: null
 }
 
 const EMPTY_SUMMARY: RecordSummary = { todayCount: 0, todayFocusSec: 0, totalFocusSec: 0 }
@@ -88,13 +91,22 @@ export function Timer(): React.JSX.Element {
   const todayMin = Math.round(summary.todayFocusSec / 60)
   const totalMin = Math.round(summary.totalFocusSec / 60)
 
+  /**
+   * 三种状态要分开：
+   *   未开始（这一段一秒都没跑过）→ 准备开始
+   *   运行中 → 进行中
+   *   跑过之后被打断 → 已暂停
+   * 一段从来没跑过就说"已暂停"是错的，用户会以为刚才发生过什么。
+   */
+  const hint = state.running ? '进行中' : state.activeSec > 0 ? '已暂停' : '准备开始'
+
   return (
     <div className="main">
       <div className="phase-label">{PHASE_LABEL[state.phase]}</div>
 
       <Ring total={state.totalSec} remaining={state.remainingSec} breathe={breathe}>
         <div className="ring__time">{format(state.remainingSec)}</div>
-        <div className="ring__hint">{state.running ? '进行中' : '已暂停'}</div>
+        <div className="ring__hint">{hint}</div>
       </Ring>
 
       <Controls running={state.running} onToggle={toggle} onSkip={skip} onReset={reset} />
@@ -105,6 +117,14 @@ export function Timer(): React.JSX.Element {
           activeId={settings.activePresetId}
           running={state.running}
           onPick={(id) => window.pomodoro?.settings.save({ activePresetId: id })}
+        />
+      ) : null}
+
+      {settings ? (
+        <TopicBar
+          topics={settings.topics ?? []}
+          activeId={state.topicId ?? null}
+          onPick={(id) => window.pomodoro?.settings.save({ activeTopicId: id })}
         />
       ) : null}
 

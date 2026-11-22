@@ -3,7 +3,7 @@
 // 规矩：不引图表库，只用 --accent / --line / --ink-2 三色，不做仪表盘风。
 
 import { useEffect, useState } from 'react'
-import type { StatsData } from '../../shared/types'
+import type { StatsData, TopicStat } from '../../shared/types'
 
 const W = 400
 const H = 116
@@ -129,8 +129,44 @@ function InterruptChart({ data }: { data: StatsData['interrupts'] }): React.JSX.
   )
 }
 
+/** 主题时间占比横条排行（带回合数、总时长、平均时长、打断率） */
+function TopicBars({ data }: { data: TopicStat[] }): React.JSX.Element {
+  if (!data.length) {
+    return <div className="card__empty">还没有按主题分组的记录</div>
+  }
+  const max = Math.max(1, ...data.map((d) => d.totalSec))
+  return (
+    <div className="topic-bars">
+      {data.map((d) => (
+        <div key={d.topicId ?? 'none'} className="topic-bar">
+          <div className="topic-bar__head">
+            <span className="topic-bar__dot" style={{ background: d.color }} />
+            <span className="topic-bar__name">{d.name}</span>
+            <span className="topic-bar__share">{Math.round(d.share * 100)}%</span>
+          </div>
+          <div className="topic-bar__track">
+            <div
+              className="topic-bar__fill"
+              style={{ width: `${(d.totalSec / max) * 100}%`, background: d.color }}
+            />
+          </div>
+          <div className="topic-bar__meta">
+            <span>
+              {d.rounds} 个番茄 · 共 {minutes(d.totalSec)} 分钟 · 平均 {minutes(d.avgSec)} 分钟
+            </span>
+            <span className={d.interruptRate > 0 ? 'topic-bar__rate topic-bar__rate--bad' : 'topic-bar__rate'}>
+              打断率 {Math.round(d.interruptRate * 100)}%
+            </span>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function Stats(): React.JSX.Element {
   const [data, setData] = useState<StatsData | null>(null)
+  const [scope, setScope] = useState<'week' | 'all'>('week')
 
   useEffect(() => {
     const api = window.pomodoro
@@ -195,6 +231,42 @@ export function Stats(): React.JSX.Element {
       <section className="card">
         <h3 className="card__title">打断原因排行</h3>
         <InterruptChart data={data.interrupts} />
+      </section>
+
+      <section className="card">
+        <h3 className="card__title">主题时间占比</h3>
+        <div className="scope">
+          <button className={scope === 'week' ? 'scope__btn scope__btn--on' : 'scope__btn'} onClick={() => setScope('week')}>
+            本周
+          </button>
+          <button className={scope === 'all' ? 'scope__btn scope__btn--on' : 'scope__btn'} onClick={() => setScope('all')}>
+            全部
+          </button>
+        </div>
+        <TopicBars data={data.topicStats[scope]} />
+        <div className="card__note">打断率 = 这个主题的回合里被打断的比例。主流产品都不给这个数。</div>
+      </section>
+
+      <section className="card">
+        <h3 className="card__title">今日概览</h3>
+        {data.todayTopics.length === 0 ? (
+          <div className="card__empty">今天还没有完成的番茄</div>
+        ) : (
+          <>
+            <div className="card__note">
+              今天 {data.todayTopicCount} 个主题 · {data.todayCount} 个番茄
+            </div>
+            {data.todayTopics.map((t) => (
+              <div key={t.topicId ?? 'none'} className="topic-today">
+                <span className="topic-bar__dot" style={{ background: t.color }} />
+                <span className="topic-today__name">{t.name}</span>
+                <span className="topic-today__num">
+                  {t.rounds} 个番茄 · {minutes(t.totalSec)} 分钟
+                </span>
+              </div>
+            ))}
+          </>
+        )}
       </section>
     </div>
   )

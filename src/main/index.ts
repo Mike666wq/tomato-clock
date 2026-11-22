@@ -109,6 +109,12 @@ async function setIslandVisible(visible: boolean): Promise<void> {
 
 /** 一个阶段自然跑完：落记录 + 强提醒 + 打开记录卡片 */
 async function handlePhaseComplete(info: PhaseCompleteInfo): Promise<void> {
+  // 主题：只有专注段挂主题，休息段不挂（方案第四节）
+  const settings = await jsonStore.getSettings()
+  const state = timer?.getState()
+  const topicId = info.phase === 'focus' ? (state?.topicId ?? null) : null
+  const topic = topicId ? settings.topics.find((t) => t.id === topicId) : undefined
+
   const session: Session = {
     id: randomUUID(),
     kind: info.phase,
@@ -119,7 +125,10 @@ async function handlePhaseComplete(info: PhaseCompleteInfo): Promise<void> {
     pausedSec: info.pausedSec,
     completed: true,
     task: '',
-    interrupt: 'none'
+    interrupt: 'none',
+    topicId: topicId ?? undefined,
+    // 存一份当时的主题名：以后改名了，历史记录还读得懂
+    topicNameSnapshot: topic?.name ?? ''
   }
 
   // 先落盘：用户不回应也不能丢数据
@@ -344,8 +353,14 @@ if (!app.requestSingleInstanceLock()) {
       })
     })
 
-    // 统计：今日按小时分布 / 近 7 天趋势 / 打断原因排行
-    ipcMain.handle('stats:get', async () => buildStats(await jsonStore.listSessions()))
+    // 统计：今日按小时分布 / 近 7 天趋势 / 打断原因排行 / 主题维度
+    ipcMain.handle('stats:get', async () => {
+      const [sessions, settings] = await Promise.all([
+        jsonStore.listSessions(),
+        jsonStore.getSettings()
+      ])
+      return buildStats(sessions, settings.topics)
+    })
 
     // 快捷键：查看与改键（失败走同一条提示链路）
     ipcMain.handle('shortcuts:get', () => getShortcutLabels())

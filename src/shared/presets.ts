@@ -71,13 +71,15 @@ export const BUILTIN_PRESETS: Preset[] = [
 
 export const DEFAULT_PRESET_ID = 'builtin-classic'
 
-/** 计时器真正需要的配置（从当前模板 + 自动开始派生） */
+/** 计时器真正需要的配置（从当前模板 + 当前主题派生） */
 export type TimerConfig = {
   focusMin: number
   shortMin: number
   longMin: number
   roundsBeforeLong: number
   autoStartNext: boolean
+  /** 用户当前选中的主题（切主题只影响下一段） */
+  topicId: string | null
 }
 
 /** 模板草稿（还没落库） */
