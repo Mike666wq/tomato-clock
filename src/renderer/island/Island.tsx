@@ -262,9 +262,6 @@ export default function Island(): React.JSX.Element {
                 }}
               >
                 {p.name}
-                <em>
-                  {p.focusMin}/{p.shortMin}
-                </em>
               </button>
             ))}
         </span>

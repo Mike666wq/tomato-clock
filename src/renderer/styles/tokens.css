@@ -79,11 +79,12 @@
   --island-fs-time-expanded: 34px;
   --island-fs-task: 13px;
   --island-pad-x: 14px;
+  --island-chip-pad: 9px;
   --island-btn: 26px;
   --island-btn-gap: 2px;
   --island-bar-h: 2px;
-  --island-bar-inset: 12px;
-  --island-bar-bottom: 6px;
+  --island-bar-inset: 18px;
+  --island-bar-bottom: 8px;
   --island-track: color-mix(in srgb, var(--ink) 10%, transparent);
 
   /* ---- 动效 ---- */
