@@ -32,12 +32,24 @@
 
 ## 下载
 
-不本地打包，构建都在 GitHub Actions 上跑：
+不本地打包，构建都在 GitHub Actions 上跑。到 [Releases](../../releases) 里拿：
 
-- **打标签的版本** → 到 [Releases](../../releases) 下载 `.exe`
-- **每次推到 master** → 到 [Actions](../../actions) 里那次运行的 Artifacts 下载（需登录 GitHub）
+| 你要的 | 找哪个 | 说明 |
+|---|---|---|
+| **稳定版** | 标签是 `v0.2.3` 这种带版本号的 | 一个版本对应一份固定代码，推荐日常用这个 |
+| **最新构建** | 标签是 `latest-build` 的预发布（Release 页上带 Pre-release 标记） | 每次推到 master 就自动覆盖，永远是最新代码，但也可能带新引入的毛病 |
 
-产物三个：`番茄钟 Setup x.y.z.exe`（安装版）、`番茄钟 x.y.z.exe`（免安装单文件）、`-免安装.zip`。
+两个入口都挂三个包：
+
+| 文件 | 用途 |
+|---|---|
+| `tomato-clock-<版本>-setup.exe` | 安装版，选目录、建快捷方式 |
+| `tomato-clock-<版本>-portable-single.exe` | 免安装单文件，双击即用 |
+| `tomato-clock-<版本>-portable.zip` | 免安装压缩包（解开是完整目录） |
+
+> 附件名是英文，因为 GitHub Release 上传时会把中文文件名吞掉（`番茄钟 Setup 0.2.3.exe` 会变成 `Setup.0.2.3.exe`）。本地自己打包仍然是中文名，只有线上附件用这套 ASCII 名。
+
+装好之后应用显示的名字还是「番茄钟」，只是下载的文件名是英文。
 
 ---
 
@@ -49,8 +61,15 @@
 pnpm install
 pnpm dev        # 开发模式跑起来（脚本里会清掉 ELECTRON_RUN_AS_NODE）
 pnpm typecheck  # 类型检查
-pnpm dist       # 打包：先编 smtc.exe，再 electron-builder 出安装包和免安装版
 ```
+
+**日常打包在线上做**：推 master 会自动出包（`latest-build` 预发布），打 `v*` 标签出正式 Release。本机不需要留着产物。
+
+```bash
+pnpm dist       # 只在需要本地验证 CI 改动、或断网应急时才用
+```
+
+`pnpm dist` 会产出 `release/` 和 `out/`（约 1.9 GB），平时可以直接删；`tools/smtc/publish/` 是开发期音乐控制要用的 exe，别删（删了重新跑一次 `pnpm dist` 或 `node scripts/prepare-smtc.mjs` 就回来）。
 
 没装 .NET SDK 也能打包——`scripts/prepare-smtc.mjs` 发布失败只留空目录，主进程找不到 `smtc.exe` 会静默关掉音乐功能，其他照常。
 
