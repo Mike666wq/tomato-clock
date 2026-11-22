@@ -50,15 +50,19 @@ const list = exprs.length
     ]
 
 // 开发模式渲染页是 http://localhost:5173/，安装版是 file:// 下的 index.html
+// CDP_TARGET 可以指定子串来挑页面，比如 island / index / stats
+const want = process.env.CDP_TARGET ?? ''
 const pages = (await targets()).filter(
   (t) => t.type === 'page' && (t.url.includes('5173') || t.url.includes('index.html'))
 )
-if (!pages.length) {
-  console.log('NO_PAGE_TARGET')
+const picked = want ? pages.filter((p) => p.url.includes(want)) : pages
+if (!picked.length) {
+  console.log(want ? `NO_TARGET(${want})` : 'NO_PAGE_TARGET')
   process.exit(1)
 }
 
-const ws = await connect(pages[0].webSocketDebuggerUrl)
+const ws = await connect(picked[0].webSocketDebuggerUrl)
+console.log(`# target: ${picked[0].url}`)
 for (const e of list) {
   try {
     const v = await evaluate(ws, e)

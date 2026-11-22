@@ -53,6 +53,20 @@
   --fs-small: 12px;
   --fs-tiny: 11px; /* 圆环内的状态小标签 */
 
+  /* ---- 灵动岛（屏幕顶端悬浮胶囊） ---- */
+  /* 底色由 --bg 派生，不另开色相 */
+  --island-bg: color-mix(in srgb, var(--bg) 94%, transparent);
+  --island-edge: color-mix(in srgb, var(--ink) 8%, transparent);
+  --island-shadow: 0 6px 16px color-mix(in srgb, var(--bg) 55%, transparent);
+  --island-w: 172px;
+  --island-h: 34px;
+  --island-radius: 20px;
+  --island-side-pad: 8px;
+  --island-bottom-pad: 14px;
+  --island-gap: 9px;
+  --island-dot: 7px;
+  --island-fs-time: 17px;
+
   /* ---- 动效 ---- */
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
   --dur-fast: 150ms;

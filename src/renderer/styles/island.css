@@ -1,0 +1,70 @@
+/*
+ * 灵动岛（屏幕顶端悬浮胶囊）的样式。
+ *
+ * 规矩同 tokens.css：颜色和尺寸一律来自 tokens.css 的变量，
+ * 这里不出现任何硬编码色值/像素值。
+ *
+ * 形态：上边两角直角（贴死屏幕顶端，像从边框里长出来），
+ * 下边两角圆角。窗口四周留透明余量给阴影。
+ */
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  /* 透明窗口：body 不能有底色，否则会露出一块方形底 */
+  background: transparent;
+  overflow: hidden;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+}
+
+.island {
+  position: absolute;
+  top: 0;
+  left: var(--island-side-pad);
+  right: var(--island-side-pad);
+  height: var(--island-h);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--island-gap);
+  background: var(--island-bg);
+  border: 1px solid var(--island-edge);
+  border-top: none; /* 贴屏幕顶端，不要上边描边 */
+  border-radius: 0 0 var(--island-radius) var(--island-radius);
+  box-shadow: var(--island-shadow);
+  color: var(--ink);
+  user-select: none;
+  cursor: default;
+}
+
+.island__dot {
+  flex: none;
+  width: var(--island-dot);
+  height: var(--island-dot);
+  border-radius: 50%;
+  background: var(--phase);
+}
+
+.island__time {
+  font-family: var(--font-num);
+  font-size: var(--island-fs-time);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums; /* 跳秒不左右抖 */
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+/* 暂停：整体降不透明度，时间与圆点转灰 */
+html[data-paused='1'] .island {
+  opacity: 0.75;
+}
+
+html[data-paused='1'] .island__time {
+  color: var(--ink-2);
+}

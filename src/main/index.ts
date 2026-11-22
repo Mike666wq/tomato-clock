@@ -7,9 +7,10 @@ import { app, BrowserWindow, dialog, globalShortcut, ipcMain, screen } from 'ele
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { jsonStore } from './store/json-store'
-import { setupScreenshot } from './screenshot'
+import { setupScreenshot, setupIslandScreenshot } from './screenshot'
 import { Timer, type TimerAction } from './timer'
 import { createTray, type TrayController } from './tray'
+import { createIsland, type IslandController } from './island'
 import { createReminder, type ReminderController } from './reminder'
 import { getShortcutLabels, registerShortcuts, replaceShortcut, type ShortcutId } from './shortcuts'
 import { buildStats } from './stats'
@@ -36,6 +37,7 @@ const WINDOW_BG = '#0E1013'
 const RECORD_AUTO_CLOSE_MS = 60_000
 
 let mainWindow: BrowserWindow | null = null
+let island: IslandController | null = null
 let tray: TrayController | null = null
 let timer: Timer | null = null
 let reminder: ReminderController | null = null
@@ -247,6 +249,8 @@ if (!app.requestSingleInstanceLock()) {
   void app.whenReady().then(async () => {
     mainWindow = createWindow()
     reminder = createReminder()
+    // 灵动岛：常驻贴顶的透明胶囊（v0.2）
+    island = createIsland()
 
     const settings = await jsonStore.getSettings()
     timer = new Timer(settings)
@@ -363,6 +367,10 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.on('window:close', () => mainWindow?.hide())
     ipcMain.on('window:show', () => showWindow())
 
+    // 灵动岛：收起/展开（改窗口大小后重新贴顶居中）、打开主窗口
+    ipcMain.on('island:set-mode', (_e, mode: 'collapsed' | 'expanded') => island?.setMode(mode))
+    ipcMain.on('island:open-main', () => showWindow())
+
     registerAllShortcuts()
 
     // 启动时把汇总推给界面（重启后底部状态行要能恢复）
@@ -370,6 +378,7 @@ if (!app.requestSingleInstanceLock()) {
 
     if (import.meta.env.DEV) {
       setupScreenshot(mainWindow)
+      if (island) setupIslandScreenshot(island.win)
       // 开发期预览：指定初始阶段与已过秒数，方便截不同状态的视觉稿
       const phase = process.env['POMODORO_PHASE'] as PhaseCompleteInfo['phase'] | undefined
       const elapsed = Number(process.env['POMODORO_ELAPSED'])
@@ -391,5 +400,6 @@ if (!app.requestSingleInstanceLock()) {
     globalShortcut.unregisterAll()
     timer?.dispose()
     tray?.destroy()
+    island?.destroy()
   })}
 

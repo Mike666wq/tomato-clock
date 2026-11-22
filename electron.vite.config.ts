@@ -14,7 +14,11 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
     build: {
       rollupOptions: {
-        input: 'src/preload/index.ts'
+        // 两个入口：主窗口用 index.js，灵动岛用 island.js
+        input: {
+          index: 'src/preload/index.ts',
+          island: 'src/preload/island.ts'
+        }
       }
     }
   },
@@ -26,7 +30,11 @@ export default defineConfig({
     plugins: [react()],
     build: {
       rollupOptions: {
-        input: 'index.html'
+        // 两个渲染入口：主界面 index.html，灵动岛 island.html
+        input: {
+          index: 'index.html',
+          island: 'island.html'
+        }
       }
     }
   }
