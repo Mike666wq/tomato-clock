@@ -80,16 +80,25 @@ jobs:
       - name: 列出产物
         run: Get-ChildItem release -Recurse -File | Select-Object FullName, @{n='MB';e={[math]::Round($_.Length/1MB,1)}}
 
-      - name: 上传构建产物
-        uses: actions/upload-artifact@v4
+      # 不上传 Artifacts：三个包共 392 MB，免费账户 Actions 存储只有 500 MB，
+      # 两次构建就把额度撑满，之后上传会失败——而上传失败会让整个 job 失败，
+      # 连后面的 Release 都建不出来。包一律走 Release，Release 附件不占这份额度。
+      #
+      # master 推送 → 更新一个滚动的「最新构建」预发布版，随时能下到最新的包
+      - name: 发布最新构建（master）
+        if: success() && github.ref == 'refs/heads/master'
+        uses: softprops/action-gh-release@v2
         with:
-          name: tomato-clock-windows
-          path: |
+          tag_name: latest-build
+          name: 最新构建（master）
+          prerelease: true
+          body: |
+            由 master 每次推送自动覆盖更新，**不是正式版本**，随时可能被下一个构建替换。
+            要稳定版本请到正式 Release 里下带版本号的那个。
+          files: |
             release/*.exe
             release/*.zip
-          # 一个包都没有就该报错，而不是安静地传个空的
-          if-no-files-found: error
-          retention-days: 30
+          fail_on_unmatched_files: true
 
       # 注意：自己写 if: 会顶掉 GitHub 默认的 success() 判断——
       # 不加 success() 的话，前面步骤全挂了这一步照样跑，
