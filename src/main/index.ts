@@ -111,8 +111,7 @@ async function setIslandVisible(visible: boolean): Promise<void> {
 async function handlePhaseComplete(info: PhaseCompleteInfo): Promise<void> {
   // 主题：只有专注段挂主题，休息段不挂（方案第四节）
   const settings = await jsonStore.getSettings()
-  const state = timer?.getState()
-  const topicId = info.phase === 'focus' ? (state?.topicId ?? null) : null
+  const topicId = info.topicId ?? null
   const topic = topicId ? settings.topics.find((t) => t.id === topicId) : undefined
 
   const session: Session = {
@@ -124,7 +123,7 @@ async function handlePhaseComplete(info: PhaseCompleteInfo): Promise<void> {
     actualSec: info.actualSec,
     pausedSec: info.pausedSec,
     completed: true,
-    task: '',
+    task: info.task,
     interrupt: 'none',
     topicId: topicId ?? undefined,
     // 存一份当时的主题名：以后改名了，历史记录还读得懂
@@ -313,6 +312,8 @@ if (!app.requestSingleInstanceLock()) {
 
     ipcMain.handle('timer:get-state', () => timer?.getState())
     ipcMain.on('timer:action', (_e, action: TimerAction) => timer?.apply(action))
+    // 当前这一段的任务名（灵动岛就地编辑）
+    ipcMain.on('timer:set-task', (_e, text: string) => timer?.setTask(String(text ?? '')))
 
     ipcMain.handle('records:summary', () => buildSummary())
     ipcMain.on('records:submit', (_e, id: string, task: string, interrupt: InterruptKind) => {
@@ -335,6 +336,11 @@ if (!app.requestSingleInstanceLock()) {
         const next: Settings = { ...current, ...patch }
         await jsonStore.saveSettings(next)
         timer?.updateSettings(timerConfigOf(next))
+        // 设置里的「显示灵动岛」开关要立刻生效，不用重启
+        if (patch.islandVisible !== undefined && patch.islandVisible !== current.islandVisible) {
+          if (patch.islandVisible) island?.show()
+          else island?.hide()
+        }
         // 切模板/改时长后，所有窗口都要知道当前模板变了
         broadcast('settings:changed', next)
         if (patch.launchAtLogin !== undefined && patch.launchAtLogin !== current.launchAtLogin) {

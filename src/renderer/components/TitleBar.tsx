@@ -11,7 +11,7 @@ export function TitleBar(): React.JSX.Element {
         <button
           className="titlebar__btn"
           aria-label="最小化"
-          title="最小化"
+          data-tip="最小化"
           onClick={() => window.pomodoro?.window.minimize()}
         >
           <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
@@ -21,7 +21,7 @@ export function TitleBar(): React.JSX.Element {
         <button
           className="titlebar__btn titlebar__btn--close"
           aria-label="关闭"
-          title="关闭"
+          data-tip="关闭"
           onClick={() => window.pomodoro?.window.close()}
         >
           <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">

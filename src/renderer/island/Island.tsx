@@ -3,11 +3,13 @@
 // 计时状态全部来自主进程（和主窗口共用同一个状态机），
 // 这里不自己算时间、不自己存状态，只读快照。
 //
-// 交互（方案第三节）：
+// 交互（方案第三节 + v0.2-c 重做）：
 //   收起态单击 = 开始 / 暂停（最常用的动作给最短路径，不展开）
-//   悬停 120ms 展开，离开 400ms 收起
-//   展开态：暂停/继续 · 跳过 · 打开主界面；点时间数字也开主界面
-//   Esc 收起
+//   悬停 120ms 展开，移开 400ms 收起
+//   展开态分两层，**不平铺**：
+//     第一层：时间 + 任务名 + 三个图标 + 一行两个"当前值胶囊"
+//     第二层：点某个胶囊，下面那一行换成它的候选项（一次只展开一行）
+//   Esc 逐层收回：先收回第二层，再收起整个岛
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Settings, TimerState } from '../../shared/types'
@@ -17,6 +19,9 @@ import { OpenIcon, PauseIcon, PlayIcon, SkipIcon } from './Icons'
 const HOVER_OPEN_MS = 120
 /** 离开多久收起 */
 const HOVER_CLOSE_MS = 400
+
+/** 展开态第二层显示什么 */
+type Layer = 'idle' | 'presets' | 'topics'
 
 /** 秒 → mm:ss */
 function formatTime(sec: number): string {
@@ -30,7 +35,10 @@ export default function Island(): React.JSX.Element {
   const [state, setState] = useState<TimerState | null>(null)
   const [settings, setSettings] = useState<Settings | null>(null)
   const [expanded, setExpanded] = useState(false)
+  const [layer, setLayer] = useState<Layer>('idle')
   const [hint, setHint] = useState('')
+  const [editingTask, setEditingTask] = useState(false)
+  const [taskDraft, setTaskDraft] = useState('')
   const openTimer = useRef<number | null>(null)
   const closeTimer = useRef<number | null>(null)
 
@@ -59,6 +67,7 @@ export default function Island(): React.JSX.Element {
   /** 收起 / 展开：本地状态决定画什么，主进程据此改窗口大小 */
   const setMode = useCallback((next: boolean) => {
     setExpanded(next)
+    if (!next) setLayer('idle')
     window.island?.island.setMode(next ? 'expanded' : 'collapsed')
   }, [])
 
@@ -77,14 +86,19 @@ export default function Island(): React.JSX.Element {
     closeTimer.current = window.setTimeout(() => setMode(false), HOVER_CLOSE_MS)
   }, [setMode])
 
-  // Esc 收起
+  // Esc：先收回第二层，再收起整个岛
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') setMode(false)
+      if (e.key !== 'Escape') return
+      if (layer !== 'idle') {
+        setLayer('idle')
+        return
+      }
+      setMode(false)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [setMode])
+  }, [layer, setMode])
 
   useEffect(
     () => () => {
@@ -101,6 +115,7 @@ export default function Island(): React.JSX.Element {
   /** 切模板：只影响下一段，跑着的时候给一句轻提示 */
   const pickPreset = (id: string): void => {
     window.island?.settings.save({ activePresetId: id })
+    setLayer('idle')
     if (state?.running) {
       setHint('下一段生效')
       window.setTimeout(() => setHint(''), 2000)
@@ -110,44 +125,38 @@ export default function Island(): React.JSX.Element {
   /** 切主题：同一条规则，只影响下一段 */
   const pickTopic = (id: string | null): void => {
     window.island?.settings.save({ activeTopicId: id })
+    setLayer('idle')
     if (state?.running) {
       setHint('下一段生效')
       window.setTimeout(() => setHint(''), 2000)
     }
   }
 
-  /**
-   * 收起态单击 = 开始 / 暂停，不展开。
-   * 点之前把"悬停展开"的定时器撤掉：否则点完 120ms 后它自己展开了，
-   * 用户以为点了没用。
-   */
-  const onCollapsedClick = (): void => {
-    if (openTimer.current) {
-      window.clearTimeout(openTimer.current)
-      openTimer.current = null
-    }
-    toggle()
+  // 任务名就地编辑
+  const startEditTask = (): void => {
+    setTaskDraft(state?.task ?? '')
+    setEditingTask(true)
+  }
+
+  const commitTask = (): void => {
+    window.island?.timer.setTask(taskDraft.trim())
+    setEditingTask(false)
   }
 
   const remaining = state ? state.remainingSec : 0
   const running = state?.running ?? false
   const percent = state && state.totalSec > 0 ? Math.min(100, (state.activeSec / state.totalSec) * 100) : 0
-  const phaseText = state
-    ? state.phase === 'focus'
-      ? '专注'
-      : state.phase === 'short'
-        ? '短休'
-        : '长休'
-    : ''
+
+  const activePreset = (settings?.presets ?? []).find((p) => p.id === settings?.activePresetId)
+  const activeTopic = (settings?.topics ?? []).find((t) => t.id === (state?.topicId ?? null))
 
   if (!expanded) {
     return (
       <div
         className="island"
-        title={`${phaseText} · 点击开始/暂停`}
         onMouseEnter={onEnter}
         onMouseLeave={onLeave}
-        onClick={onCollapsedClick}
+        onClick={toggle}
       >
         <span className="island__dot" />
         <span className="island__time">{formatTime(remaining)}</span>
@@ -158,12 +167,13 @@ export default function Island(): React.JSX.Element {
   return (
     <div
       className="island island--expanded"
-      title={phaseText}
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
-      // 展开态的空白处也是"开始/暂停"：鼠标移上来 120ms 岛就展开了，
-      // 用户这时点原来胶囊的位置（时间旁边），不该什么都没发生。
-      onClick={toggle}
+      onClick={() => {
+        // 展开态点空白：收回第二层。第一层点空白还是"开始/暂停"（整条岛是大号开关）
+        if (layer !== 'idle') setLayer('idle')
+        else toggle()
+      }}
     >
       <div className="island__row">
         <button
@@ -172,36 +182,36 @@ export default function Island(): React.JSX.Element {
             e.stopPropagation()
             openMain()
           }}
-          title="打开主界面"
         >
           {formatTime(remaining)}
         </button>
-        <span className="island__task">
-          {hint ? (
-            <em className="island__hint">{hint}</em>
-          ) : (
-            <span className="island__presets">
-              {[...(settings?.presets ?? [])]
-                .sort((a, b) => a.order - b.order)
-                .slice(0, 5)
-                .map((p) => (
-                  <button
-                    key={p.id}
-                    className={
-                      p.id === settings?.activePresetId ? 'island__preset island__preset--on' : 'island__preset'
-                    }
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      pickPreset(p.id)
-                    }}
-                    title={`专注 ${p.focusMin} · 短休 ${p.shortMin} · 长休 ${p.longMin} 分钟`}
-                  >
-                    {p.name}
-                  </button>
-                ))}
-            </span>
-          )}
-        </span>
+
+        {editingTask ? (
+          <input
+            className="island__task-input"
+            value={taskDraft}
+            autoFocus
+            placeholder="这一段做什么"
+            onChange={(e) => setTaskDraft(e.target.value)}
+            onBlur={commitTask}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commitTask()
+              if (e.key === 'Escape') setEditingTask(false)
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        ) : (
+          <button
+            className="island__task"
+            onClick={(e) => {
+              e.stopPropagation()
+              startEditTask()
+            }}
+          >
+            {state?.task || '点这里写这一段做什么'}
+          </button>
+        )}
+
         <span className="island__actions">
           <button
             className="island__btn"
@@ -209,7 +219,6 @@ export default function Island(): React.JSX.Element {
               e.stopPropagation()
               toggle()
             }}
-            title={running ? '暂停' : '继续'}
             aria-label={running ? '暂停' : '继续'}
           >
             {running ? <PauseIcon /> : <PlayIcon />}
@@ -220,7 +229,6 @@ export default function Island(): React.JSX.Element {
               e.stopPropagation()
               skip()
             }}
-            title="跳过本段"
             aria-label="跳过本段"
           >
             <SkipIcon />
@@ -231,48 +239,96 @@ export default function Island(): React.JSX.Element {
               e.stopPropagation()
               openMain()
             }}
-            title="打开主界面"
             aria-label="打开主界面"
           >
             <OpenIcon />
           </button>
         </span>
       </div>
-      <span className="island__topics">
-        {[...(settings?.topics ?? [])]
-          .filter((t) => !t.archived)
-          .sort((a, b) => a.order - b.order)
-          .slice(0, 6)
-          .map((t) => (
-            <button
-              key={t.id}
-              className={
-                t.id === (state?.topicId ?? null) ? 'island__topic island__topic--on' : 'island__topic'
-              }
-              onClick={(e) => {
-                e.stopPropagation()
-                pickTopic(t.id)
-              }}
-              title={`主题：${t.name}`}
-            >
-              <i style={{ background: t.color }} />
-              {t.name}
-            </button>
-          ))}
-        <button
-          className={
-          (state?.topicId ?? null) === null ? 'island__topic island__topic--on' : 'island__topic'
-        }
-          onClick={(e) => {
-            e.stopPropagation()
-            pickTopic(null)
-          }}
-          title="不归类到任何主题"
-        >
-          <i style={{ background: 'var(--ink-2)' }} />
-          未分类
-        </button>
-      </span>
+
+      {layer === 'presets' ? (
+        <span className="island__opts">
+          {[...(settings?.presets ?? [])]
+            .sort((a, b) => a.order - b.order)
+            .map((p) => (
+              <button
+                key={p.id}
+                className={
+                  p.id === settings?.activePresetId ? 'island__opt island__opt--on' : 'island__opt'
+                }
+                onClick={(e) => {
+                  e.stopPropagation()
+                  pickPreset(p.id)
+                }}
+              >
+                {p.name}
+                <em>
+                  {p.focusMin}/{p.shortMin}
+                </em>
+              </button>
+            ))}
+        </span>
+      ) : layer === 'topics' ? (
+        <span className="island__opts">
+          <button
+            className={!activeTopic ? 'island__opt island__opt--on' : 'island__opt'}
+            onClick={(e) => {
+              e.stopPropagation()
+              pickTopic(null)
+            }}
+          >
+            未分类
+          </button>
+          {[...(settings?.topics ?? [])]
+            .filter((t) => !t.archived)
+            .sort((a, b) => a.order - b.order)
+            .map((t) => (
+              <button
+                key={t.id}
+                className={
+                  t.id === (state?.topicId ?? null) ? 'island__opt island__opt--on' : 'island__opt'
+                }
+                onClick={(e) => {
+                  e.stopPropagation()
+                  pickTopic(t.id)
+                }}
+              >
+                <i style={{ background: t.color }} />
+                {t.name}
+              </button>
+            ))}
+        </span>
+      ) : (
+        <span className="island__vals">
+          <button
+            className="island__val"
+            onClick={(e) => {
+              e.stopPropagation()
+              setLayer('presets')
+            }}
+          >
+            {activePreset ? `${activePreset.name} · ${activePreset.focusMin}/${activePreset.shortMin}` : '未选模板'}
+          </button>
+          <button
+            className="island__val"
+            onClick={(e) => {
+              e.stopPropagation()
+              setLayer('topics')
+            }}
+          >
+            {activeTopic ? (
+              <>
+                <i style={{ background: activeTopic.color }} />
+                {activeTopic.name}
+              </>
+            ) : (
+              '未分类'
+            )}
+          </button>
+          {hint ? <em className="island__hint">{hint}</em> : null}
+        </span>
+      )}
+
       <span className="island__bar">
         <i style={{ width: `${percent}%` }} />
       </span>

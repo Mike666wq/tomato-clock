@@ -22,9 +22,11 @@ export function PresetBar({ presets, activeId, running, onPick }: Props): React.
           key={p.id}
           className={p.id === activeId ? 'presets__chip presets__chip--on' : 'presets__chip'}
           onClick={() => onPick(p.id)}
-          title={`专注 ${p.focusMin} · 短休 ${p.shortMin} · 长休 ${p.longMin} 分钟`}
         >
           {p.name}
+          <em>
+            {p.focusMin}/{p.shortMin}
+          </em>
         </button>
       ))}
       {running ? <span className="presets__hint">下一段生效</span> : null}

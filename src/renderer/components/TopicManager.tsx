@@ -97,7 +97,7 @@ export function TopicManager({ topics, activeId, onTopics, onActivate, onNotice 
 
         {live.map((t) => (
           <div key={t.id} className={t.id === activeId ? 'topic-row topic-row--on' : 'topic-row'}>
-            <button className="topic-row__name" onClick={() => onActivate(t.id)} title="设为当前主题">
+            <button className="topic-row__name" onClick={() => onActivate(t.id)}>
               <span className="topic-row__dot" style={{ background: t.color }} />
               {t.name}
               {t.id === activeId ? <em>当前</em> : null}

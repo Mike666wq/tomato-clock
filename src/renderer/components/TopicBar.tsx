@@ -20,7 +20,6 @@ export function TopicBar({ topics, activeId, onPick, compact }: Props): React.JS
       <button
         className={activeId === null ? 'topics__chip topics__chip--on' : 'topics__chip'}
         onClick={() => onPick(null)}
-        title="不归类到任何主题"
       >
         <span className="topics__dot" style={{ background: 'var(--ink-2)' }} />
         未分类
@@ -30,7 +29,6 @@ export function TopicBar({ topics, activeId, onPick, compact }: Props): React.JS
           key={t.id}
           className={t.id === activeId ? 'topics__chip topics__chip--on' : 'topics__chip'}
           onClick={() => onPick(t.id)}
-          title={`主题：${t.name}`}
         >
           <span className="topics__dot" style={{ background: t.color }} />
           {t.name}

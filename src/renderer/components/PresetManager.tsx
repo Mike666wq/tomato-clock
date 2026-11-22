@@ -133,7 +133,7 @@ export function PresetManager({ presets, activeId, onPresets, onActivate, onNoti
       <div className="preset-list">
         {sorted.map((p) => (
           <div key={p.id} className={p.id === activeId ? 'preset-row preset-row--on' : 'preset-row'}>
-            <button className="preset-row__name" onClick={() => onActivate(p.id)} title="设为当前模板">
+            <button className="preset-row__name" onClick={() => onActivate(p.id)}>
               {p.name}
               {p.id === activeId ? <em>当前</em> : null}
             </button>

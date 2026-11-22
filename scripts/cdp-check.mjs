@@ -50,12 +50,25 @@ const list = exprs.length
     ]
 
 // 开发模式渲染页是 http://localhost:5173/，安装版是 file:// 下的 index.html
-// CDP_TARGET 可以指定子串来挑页面，比如 island / index / stats
+// CDP_TARGET 可以指定挑哪个页面：'main'（主窗口）/ 'island'（灵动岛），其余按子串匹配
 const want = process.env.CDP_TARGET ?? ''
 const pages = (await targets()).filter(
   (t) => t.type === 'page' && (t.url.includes('5173') || t.url.includes('index.html'))
 )
-const picked = want ? pages.filter((p) => p.url.includes(want)) : pages
+const pathOf = (t) => {
+  try {
+    return new URL(t.url).pathname
+  } catch {
+    return t.url
+  }
+}
+const picked = want
+  ? want === 'main'
+    ? pages.filter((p) => pathOf(p) === '/' || pathOf(p).endsWith('index.html'))
+    : want === 'island'
+      ? pages.filter((p) => pathOf(p).includes('island'))
+      : pages.filter((p) => p.url.includes(want))
+  : pages
 if (!picked.length) {
   console.log(want ? `NO_TARGET(${want})` : 'NO_PAGE_TARGET')
   process.exit(1)

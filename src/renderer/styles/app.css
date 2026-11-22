@@ -1114,3 +1114,40 @@ button {
   font-size: var(--fs-small);
   color: var(--ink-2);
 }
+
+/* 自绘的暗色小提示。
+   不用系统原生 title 提示框——深色界面里冒一个白框刺眼得像没做完。
+   用法：data-tip="说明" */
+[data-tip] {
+  position: relative;
+}
+
+[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 3px 8px;
+  font-size: var(--fs-tiny);
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease);
+  z-index: 20;
+}
+
+[data-tip]:hover::after {
+  opacity: 1;
+}
+
+/* 模板胶囊里的小字：专注/短休 */
+.presets__chip > em {
+  font-style: normal;
+  opacity: 0.65;
+  margin-left: 4px;
+}

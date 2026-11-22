@@ -7,9 +7,9 @@ export const ISLAND = {
   /** 收起态胶囊尺寸（DIP） */
   collapsedW: 172,
   collapsedH: 34,
-  /** 展开态胶囊尺寸（DIP）。两行：模板胶囊 + 主题胶囊 */
+  /** 展开态胶囊尺寸（DIP）。两层：信息行 + 当前值/选项行 */
   expandedW: 344,
-  expandedH: 104,
+  expandedH: 92,
   /** 窗口左右各留的透明余量（给阴影） */
   sidePad: 8,
   /** 窗口底部留的透明余量（给阴影） */

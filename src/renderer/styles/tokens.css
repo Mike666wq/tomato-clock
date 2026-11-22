@@ -55,9 +55,9 @@
 
   /* ---- 灵动岛（屏幕顶端悬浮胶囊） ---- */
   /* 伪毛玻璃四层：半透明底 + 噪点 + 高光/暗边 + 内阴影（缺一层就不像玻璃）
-     底色是 rgba(44,44,44,0.9)：0.72 太透，浅色壁纸上会变中灰；
-     现在不管壁纸明暗，岛都是近黑的（白底上约 #3a3a3a，深底上约 #222） */
-  --island-bg: rgba(44, 44, 44, 0.9);
+     底色是 rgba(44,44,44,0.95)：0.9 时壁纸的泡沫/水反差会透出纹理（实测有效不透明度
+     0.895，波浪纹看得见），0.95 之后不管壁纸明暗，岛都是近黑的 */
+  --island-bg: rgba(34, 34, 34, 0.95);
   --island-edge: color-mix(in srgb, var(--ink) 8%, transparent);
   --island-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
   --island-hairline: rgba(255, 255, 255, 0.1);
@@ -67,7 +67,7 @@
   --island-noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
   --island-w: 172px;
   --island-h: 34px;
-  --island-h-expanded: 104px;
+  --island-h-expanded: 92px;
   --island-radius: 17px; /* 收起态下沿做半圆（半高 17px），最像灵动岛 */
   --island-radius-expanded: 20px; /* 展开态半高 38px 太大，像面包 */
   --island-side-pad: 8px;

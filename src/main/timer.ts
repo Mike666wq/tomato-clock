@@ -43,6 +43,8 @@ export class Timer {
    * 规则跟时长一样：中途切主题只影响下一段，当前段不变。
    */
   private segmentTopicId: string | null = null
+  /** 当前这一段的任务名（灵动岛上就地编辑） */
+  private segmentTask = ''
 
   constructor(cfg: TimerConfig) {
     this.cfg = cfg
@@ -80,8 +82,15 @@ export class Timer {
       focusRounds: this.focusRounds,
       completed: { ...this.completed },
       topicId: this.segmentTopicId,
-      activeTopicId: this.cfg.topicId
+      activeTopicId: this.cfg.topicId,
+      task: this.segmentTask
     }
+  }
+
+  /** 设置当前这一段的任务名（灵动岛就地编辑用） */
+  setTask(text: string): void {
+    this.segmentTask = text
+    this.emit()
   }
 
   subscribe(fn: (s: TimerState) => void): () => void {
@@ -200,6 +209,7 @@ export class Timer {
     this.segmentTotalSec = this.phaseSec(this.phase)
     this.remainingSecCached = this.segmentTotalSec
     this.segmentTopicId = this.cfg.topicId
+    this.segmentTask = ''
     this.emit()
   }
 
@@ -249,7 +259,10 @@ export class Timer {
         actualSec,
         pausedSec,
         startedAt: new Date(this.phaseStartedAt).toISOString(),
-        endedAt: new Date(endedAt).toISOString()
+        endedAt: new Date(endedAt).toISOString(),
+        // 任务名和主题必须在清空之前取出来：后面这段的 task 会被清掉
+        task: this.segmentTask,
+        topicId: finished === 'focus' ? this.segmentTopicId : null
       }
       this.phaseListeners.forEach((fn) => fn(info))
     }
@@ -268,6 +281,8 @@ export class Timer {
     this.phaseStartedAt = endedAt
     // 新的一段开始：主题用"此刻"选中的那个（用户可能刚在休息里切过）
     this.segmentTopicId = this.cfg.topicId
+    // 任务名是"这一段"的，新的一段从头开始
+    this.segmentTask = ''
     // 下一段用新的时长
     this.segmentTotalSec = this.phaseSec(next)
     this.remainingSecCached = this.segmentTotalSec

@@ -67,6 +67,8 @@ export type TimerState = {
   topicId: string | null
   /** 用户当前选中的主题（切它只影响下一段） */
   activeTopicId: string | null
+  /** 当前这一段的任务名（灵动岛上就地编辑，写进这一段的记录） */
+  task: string
 }
 
 /** 一个阶段自然跑完时，主进程交给界面与存储层的信息 */
@@ -79,6 +81,10 @@ export type PhaseCompleteInfo = {
   pausedSec: number
   startedAt: string
   endedAt: string
+  /** 这一段的任务名（灵动岛上写的）。要在这里带上：等异步流程回来再读状态就晚了 */
+  task: string
+  /** 这一段挂在哪个主题上（休息段为空） */
+  topicId: string | null
 }
 
 /** 底部状态行用的汇总 */

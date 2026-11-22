@@ -201,10 +201,11 @@ body {
   transition: width 240ms linear;
 }
 
-/* 暂停：整体降不透明度，时间与圆点转灰。
-   别降太多：底色本来就靠不透明度压深，降到 0.75 会让岛在亮壁纸上发灰 */
-html[data-paused='1'] .island {
-  opacity: 0.92;
+/* 暂停：只把圆点和数字转灰。
+   **不要给整个胶囊降不透明度** —— 底色本来就靠 0.9 的不透明度压深，
+   再乘一个 0.92，壁纸的花纹会透出来，看着就不像"近黑"了。 */
+html[data-paused='1'] .island__dot {
+  background: var(--ink-2);
 }
 
 html[data-paused='1'] .island__time,
@@ -212,17 +213,61 @@ html[data-paused='1'] .island__clock {
   color: var(--ink-2);
 }
 
-/* ---- 计时模板（v0.3-a）：灵动岛里的一排小胶囊 ---- */
 
-.island__presets {
-  display: flex;
-  gap: 4px;
+/* ---- 展开态：两层结构（v0.2-c 重做） ----
+   第一层：时间 + 任务名 + 三个图标
+   第二层：默认是"当前值胶囊"（模板 / 主题各一个），点开某一项就换成那一项的候选项
+   一次只展开一行，加多少模板主题都不会撑爆 */
+
+.island__task {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+  font-size: var(--island-fs-task);
+  color: var(--ink-2);
+  white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: text;
 }
 
-.island__preset {
-  height: 20px;
-  padding: 0 7px;
+.island__task:hover {
+  color: var(--ink);
+}
+
+.island__task-input {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 6px;
+  border: none;
+  border-bottom: 1px solid var(--phase);
+  background: var(--surface-2);
+  border-radius: var(--r-sm);
+  color: var(--ink);
+  font-size: var(--island-fs-task);
+  outline: none;
+}
+
+.island__vals,
+.island__opts {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding-left: var(--island-pad-x);
+  overflow: hidden;
+  min-height: 22px;
+}
+
+.island__val {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 9px;
   font-size: var(--fs-tiny);
   color: var(--ink-2);
   background: transparent;
@@ -232,39 +277,17 @@ html[data-paused='1'] .island__clock {
   white-space: nowrap;
 }
 
-.island__preset:hover {
+.island__val:hover {
   color: var(--ink);
   background: var(--hover);
 }
 
-.island__preset--on {
-  color: var(--on-phase);
-  background: var(--phase);
-  border-color: var(--phase);
-}
-
-.island__hint {
-  font-style: normal;
-  color: var(--ink-2);
-  font-size: var(--island-fs-task);
-}
-
-/* ---- 主题（v0.3-b）：灵动岛第二行 ---- */
-
-.island__topics {
-  display: flex;
-  gap: 4px;
-  margin-top: 6px;
-  padding-left: var(--island-pad-x);
-  overflow: hidden;
-}
-
-.island__topic {
+.island__opt {
   display: flex;
   align-items: center;
-  gap: 4px;
-  height: 20px;
-  padding: 0 8px;
+  gap: 5px;
+  height: 22px;
+  padding: 0 9px;
   font-size: var(--fs-tiny);
   color: var(--ink-2);
   background: transparent;
@@ -274,20 +297,32 @@ html[data-paused='1'] .island__clock {
   white-space: nowrap;
 }
 
-.island__topic > i {
+.island__opt > i {
   width: 6px;
   height: 6px;
   border-radius: 50%;
   flex: none;
 }
 
-.island__topic:hover {
+.island__opt > em {
+  font-style: normal;
+  color: var(--ink-2);
+  opacity: 0.7;
+}
+
+.island__opt:hover {
   color: var(--ink);
   background: var(--hover);
 }
 
-.island__topic--on {
+.island__opt--on {
   color: var(--ink);
   border-color: var(--ink-2);
   background: var(--active);
+}
+
+.island__hint {
+  font-style: normal;
+  color: var(--ink-2);
+  font-size: var(--fs-tiny);
 }

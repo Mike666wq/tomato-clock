@@ -20,7 +20,8 @@ const FALLBACK: TimerState = {
   focusRounds: 0,
   completed: { focus: 0, short: 0, long: 0 },
   topicId: null,
-  activeTopicId: null
+  activeTopicId: null,
+  task: ''
 }
 
 const EMPTY_SUMMARY: RecordSummary = { todayCount: 0, todayFocusSec: 0, totalFocusSec: 0 }

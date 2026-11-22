@@ -152,6 +152,21 @@ export function SettingsPage({ onNotice }: Props): React.JSX.Element {
       </section>
 
       <section className="card">
+        <h3 className="card__title">灵动岛</h3>
+        <label className="toggle">
+          <input
+            type="checkbox"
+            checked={settings.islandVisible}
+            onChange={(e) => patch({ islandVisible: e.target.checked })}
+          />
+          <span>在屏幕顶端显示灵动岛</span>
+        </label>
+        <div className="card__note">
+          关掉之后顶上那条胶囊就不显示了，主界面照常用。也可以在灵动岛右键菜单里临时隐藏。
+        </div>
+      </section>
+
+      <section className="card">
         <h3 className="card__title">全局快捷键</h3>
         {shortcuts.map((s) => (
           <div className="field" key={s.id}>

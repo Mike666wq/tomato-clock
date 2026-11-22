@@ -21,7 +21,9 @@ const api = {
       return () => {
         ipcRenderer.removeListener('timer:state', listener)
       }
-    }
+    },
+    /** 设置当前这一段的任务名（就地编辑） */
+    setTask: (text: string): void => ipcRenderer.send('timer:set-task', text)
   },
   island: {
     /** 收起 / 展开（主进程据此改窗口大小并重新贴顶居中） */
