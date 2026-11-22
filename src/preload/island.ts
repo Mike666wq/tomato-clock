@@ -4,7 +4,7 @@
 // 避免浮层上误触到主窗口专属的动作。
 
 import { contextBridge, ipcRenderer } from 'electron'
-import type { Settings, TimerState } from '../shared/types'
+import type { MediaSnapshot, Settings, TimerState } from '../shared/types'
 import type { IslandMode } from '../shared/island'
 
 const api = {
@@ -27,9 +27,26 @@ const api = {
   },
   island: {
     /** 收起 / 展开（主进程据此改窗口大小并重新贴顶居中） */
-    setMode: (mode: IslandMode): void => ipcRenderer.send('island:set-mode', mode),
+    setMode: (mode: IslandMode, music?: boolean): void => {
+      // music 决定展开态下面要不要多一行音乐控制，窗口高度跟着它变
+      if (typeof music === 'boolean') ipcRenderer.send('island:set-mode', mode, music)
+      else ipcRenderer.send('island:set-mode', mode)
+    },
     /** 打开主窗口（完整界面） */
     openMain: (): void => ipcRenderer.send('island:open-main')
+  },
+  media: {
+    /** 当前在放什么；null = 没有音乐在放 */
+    getState: (): Promise<MediaSnapshot | null> => ipcRenderer.invoke('media:get-state'),
+    /** 发控制命令 */
+    command: (cmd: 'play' | 'pause' | 'next' | 'prev'): void => ipcRenderer.send('media:command', cmd),
+    onState: (cb: (s: MediaSnapshot | null) => void): (() => void) => {
+      const listener = (_e: unknown, s: MediaSnapshot | null): void => cb(s)
+      ipcRenderer.on('media:state', listener)
+      return () => {
+        ipcRenderer.removeListener('media:state', listener)
+      }
+    }
   },
   settings: {
     /** 读设置（灵动岛要显示当前模板、切换模板） */

@@ -33,7 +33,7 @@ export type IslandController = {
   show(): void
   hide(): void
   isVisible(): boolean
-  setMode(mode: IslandMode): void
+  setMode(mode: IslandMode, music?: boolean): void
   getMode(): IslandMode
   destroy(): void
 }
@@ -43,9 +43,15 @@ function windowWidth(mode: IslandMode): number {
   return (mode === 'expanded' ? ISLAND.expandedW : ISLAND.collapsedW) + ISLAND.sidePad * 2
 }
 
-/** 窗口高度 = 胶囊高度 + 底部余量（余量给阴影） */
-function windowHeight(mode: IslandMode): number {
-  return (mode === 'expanded' ? ISLAND.expandedH : ISLAND.collapsedH) + ISLAND.bottomPad
+/**
+ * 窗口高度 = 胶囊高度 + 底部余量（余量给阴影）。
+ *
+ * music 为真表示展开态下面还要多一行音乐控制（v0.2.2），
+ * 那一行出现/消失时窗口高度要跟着变，否则胶囊会被截掉或者多出一块空白。
+ */
+function windowHeight(mode: IslandMode, music: boolean): number {
+  const h = mode === 'expanded' ? (music ? ISLAND.expandedHMusic : ISLAND.expandedH) : ISLAND.collapsedH
+  return h + ISLAND.bottomPad
 }
 
 /**
@@ -66,11 +72,12 @@ function placeTopCenter(win: BrowserWindow): void {
 
 export function createIsland(actions: IslandActions): IslandController {
   let mode: IslandMode = 'collapsed'
+  let music = false
   let animTimer: NodeJS.Timeout | null = null
 
   const win = new BrowserWindow({
     width: windowWidth(mode),
-    height: windowHeight(mode),
+    height: windowHeight(mode, music),
     frame: false,
     transparent: true,
     // 不能写 resizable:false：Windows 上那样连程序化 setSize 都会被吞掉，
@@ -143,10 +150,11 @@ export function createIsland(actions: IslandActions): IslandController {
     void win.loadFile(path.join(__dirname, '../renderer/island.html'))
   }
 
-  const setMode = (next: IslandMode): void => {
+  const setMode = (next: IslandMode, withMusic?: boolean): void => {
     mode = next
-    animateSize(windowWidth(mode), windowHeight(mode))
-    log.info(`灵动岛切换到 ${next}`)
+    if (typeof withMusic === 'boolean') music = withMusic
+    animateSize(windowWidth(mode), windowHeight(mode, music))
+    log.info(`灵动岛切换到 ${next}${music ? '（带音乐行）' : ''}`)
   }
 
   /**

@@ -10,6 +10,8 @@ export const ISLAND = {
   /** 展开态胶囊尺寸（DIP）。两层：信息行 + 当前值/选项行 */
   expandedW: 344,
   expandedH: 92,
+  /** 展开态且显示了音乐控制那一行时的高度（多一行 26px） */
+  expandedHMusic: 118,
   /** 窗口左右各留的透明余量（给阴影） */
   sidePad: 8,
   /** 窗口底部留的透明余量（给阴影） */

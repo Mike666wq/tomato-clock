@@ -70,6 +70,7 @@
   --island-w: 172px;
   --island-h: 34px;
   --island-h-expanded: 92px;
+  --island-h-expanded-music: 118px; /* 展开态且显示了音乐控制那一行 */
   --island-radius: 17px; /* 收起态下沿做半圆（半高 17px），最像灵动岛 */
   --island-radius-expanded: 20px; /* 展开态半高 38px 太大，像面包 */
   --island-side-pad: 8px;
@@ -88,12 +89,20 @@
   --island-bar-inset: 18px;
   --island-bar-bottom: 8px;
   --island-track: color-mix(in srgb, var(--ink) 12%, transparent);
+  /* 音乐控制行（v0.2.2） */
+  --island-music-h: 26px;
+  --island-music-gap: 6px;
+  --island-music-btn: 20px;
 
   /* ---- 动效 ---- */
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
   --dur-fast: 150ms;
   --dur-base: 200ms;
   --dur-slow: 250ms;
+
+  /* ---- 横向滚动提示（模板条/主题条装不下时右边渐隐） ---- */
+  --fade-w: 28px;
+  --mask-solid: #000;
 }
 
 /* 换阶段 → 换整个界面的色调。

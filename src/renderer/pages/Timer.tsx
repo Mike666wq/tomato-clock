@@ -45,7 +45,10 @@ export function Timer(): React.JSX.Element {
    * 圆环按可用空间缩放，不能写死。
    * 之前写死 320px，用户把窗口缩到 500×589 之后环把下面全顶出去了，
    * 模板条压到导航栏上、状态行被挤没 —— 那是我的锅。
-   * 规则：min(420, 可用宽 - 96, 可用高 × 0.52)，最小 200。
+   *
+   * 规则：min(420, 可用宽 - 56, 可用高 × 0.94)，最小 200。
+   * 0.94 是量出来的：这一格里除圆环没别的东西，留 6% 余量给呼吸，
+   * 之前用 0.78 是"怕压到底下的东西"的保守值，结构改过之后可以放开。
    */
   useEffect(() => {
     const el = ringAreaRef.current
@@ -53,9 +56,7 @@ export function Timer(): React.JSX.Element {
     const measure = (): void => {
       const w = el.clientWidth
       const h = el.clientHeight
-      // 0.78：这个区域现在只装圆环（按钮那组在它下面单独占位），
-      // 早先用 0.52 是怕压到底下的东西，现在结构上压不到了，可以放大
-      const next = Math.max(200, Math.min(420, w - 96, h * 0.78))
+      const next = Math.max(200, Math.min(420, w - 56, h * 0.94))
       setRingSize(Math.round(next))
     }
     measure()

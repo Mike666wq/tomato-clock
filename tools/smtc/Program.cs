@@ -1,16 +1,19 @@
 using SmtcTool;
-// 灵动岛的媒体控制小工具（v0.4）。
+// 灵动岛的媒体控制小工具（v0.4 / v0.2.2 接入产品）。
 //
 // 用法：
 //   smtc list                列出所有会话（来源 / 标题 / 艺术家 / 播放状态）
 //   smtc current             只打印当前会话
 //   smtc play | pause | next | prev    发控制命令
-//   smtc watch               常驻：每秒输出一行 JSON（给主进程用，stdin 收命令）
+//   smtc watch               常驻：每秒输出一行状态 JSON，stdin 收命令
 //
-// 输出是 JSON（一行一条），方便主进程直接解析。
+// watch 模式是给主进程用的，协议就两行：
+//   {"kind":"state","source":"Tencent.QQMusic","title":"…","artist":"…","playing":true}
+//   {"kind":"ack","command":"play","ok":true}
+// 主进程按 "kind" 区分：state 更新界面，ack 只是命令回执。
 //
 // 为什么是 C#：PowerShell 5.1 / 7 的 WinRT 投影只投得出会话管理器，
-// Session 和 MediaPlaybackProperties 是空壳（拿不到歌名、发不出命令）。
+// Session 和 MediaPlaybackProperties 都是空壳（拿不到歌名、发不出命令）。
 // 这里的 TFM 是 net8.0-windows10.0.19041.0，投影由 .NET SDK 自带，方法全都在。
 
 using System.Text.Json;
@@ -110,13 +113,14 @@ static async Task CurrentAsync()
     Console.WriteLine(J(info));
 }
 
+/// 命令回执。watch 模式里主进程靠 kind=ack 区分它和状态行。
 static async Task<bool> CommandAsync(string cmd)
 {
     var manager = await ManagerAsync();
     var s = manager.GetCurrentSession();
     if (s is null)
     {
-        Console.WriteLine(J(new { command = cmd, ok = false, error = "没有当前会话" }));
+        Console.WriteLine(J(new { kind = "ack", command = cmd, ok = false, error = "没有当前会话" }));
         return false;
     }
     var ok = cmd switch
@@ -127,14 +131,37 @@ static async Task<bool> CommandAsync(string cmd)
         "prev" => await s.TrySkipPreviousAsync(),
         _ => false
     };
-    Console.WriteLine(J(new { command = cmd, ok }));
+    Console.WriteLine(J(new { kind = "ack", command = cmd, ok }));
     return ok;
 }
 
-// 常驻模式：每秒推一次所有会话；stdin 收到 play/pause/next/prev 就发命令
+/// 当前会话的一行状态。没有会话 / 没开音乐软件时给空标题，
+/// 主进程据此把灵动岛上的那一行整个藏掉（不是留个空行）。
+static async Task<object> StateLineAsync()
+{
+    var manager = await ManagerAsync();
+    var s = manager.GetCurrentSession();
+    if (s is null)
+    {
+        return new { kind = "state", source = "", title = "", artist = "", playing = false };
+    }
+    var info = new SessionInfo { SourceAppId = s.SourceAppUserModelId };
+    await FillAsync(s, info);
+    var playing = string.Equals(info.PlaybackState, "Playing", StringComparison.OrdinalIgnoreCase);
+    return new
+    {
+        kind = "state",
+        source = info.SourceAppId ?? "",
+        title = info.Title ?? "",
+        artist = info.Artist ?? "",
+        playing
+    };
+}
+
+// 常驻模式：每秒推一次状态；stdin 收到 play/pause/next/prev 就发命令
 static async Task WatchAsync()
 {
-    Console.WriteLine(J(await SessionsAsync()));
+    Console.WriteLine(J(await StateLineAsync()));
     Console.Out.Flush();
 
     _ = Task.Run(async () =>
@@ -147,6 +174,13 @@ static async Task WatchAsync()
             if (line.Length == 0) continue;
             try { await CommandAsync(line); }
             catch (Exception e) { Console.Error.WriteLine($"命令失败: {e.Message}"); }
+            // 命令之后立刻推一次状态：界面不用等下一个轮询周期
+            try
+            {
+                Console.WriteLine(J(await StateLineAsync()));
+                Console.Out.Flush();
+            }
+            catch (Exception e) { Console.Error.WriteLine($"状态刷新失败: {e.Message}"); }
         }
     });
 
@@ -155,7 +189,7 @@ static async Task WatchAsync()
         await Task.Delay(1000);
         try
         {
-            Console.WriteLine(J(await SessionsAsync()));
+            Console.WriteLine(J(await StateLineAsync()));
             Console.Out.Flush();
         }
         catch (Exception e)
@@ -164,4 +198,3 @@ static async Task WatchAsync()
         }
     }
 }
-

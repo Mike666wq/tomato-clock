@@ -17,6 +17,7 @@ const DEFAULTS: Settings = {
   volume: 0.5,
   launchAtLogin: false,
   islandVisible: true,
+  showMusicControl: false,
   window: { w: 480, h: 580 }
 }
 
@@ -163,6 +164,18 @@ export function SettingsPage({ onNotice }: Props): React.JSX.Element {
         </label>
         <div className="card__note">
           关掉之后顶上那条胶囊就不显示了，主界面照常用。也可以在灵动岛右键菜单里临时隐藏。
+        </div>
+        <label className="toggle">
+          <input
+            type="checkbox"
+            checked={settings.showMusicControl}
+            onChange={(e) => patch({ showMusicControl: e.target.checked })}
+          />
+          <span>在灵动岛里显示音乐控制</span>
+        </label>
+        <div className="card__note">
+          展开灵动岛时底部会多一行「♪ 歌名 - 歌手」和上一首/播放暂停/下一首三个按钮。
+          没开音乐软件时这一行自动消失，不留空位。默认关闭。
         </div>
       </section>
 

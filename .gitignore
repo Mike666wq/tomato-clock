@@ -11,3 +11,4 @@ release/
 # .NET 工具的构建产物（tools/smtc）
 tools/smtc/bin/
 tools/smtc/obj/
+tools/smtc/publish/

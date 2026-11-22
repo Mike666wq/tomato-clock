@@ -27,7 +27,18 @@ export type Settings = {
   launchAtLogin: boolean
   /** 灵动岛是否显示（托盘右键菜单可以临时藏起来） */
   islandVisible: boolean
+  /** 灵动岛展开态要不要显示音乐控制那一行。默认关：不是所有人都想在计时条里多一行东西 */
+  showMusicControl: boolean
   window: { x?: number; y?: number; w: number; h: number }
+}
+
+/** 当前在放什么（由主进程从 SMTC 子进程拿到的） */
+export type MediaSnapshot = {
+  /** 来源程序，如 Tencent.QQMusic */
+  source: string
+  title: string
+  artist: string
+  playing: boolean
 }
 
 /** 一条专注记录 */
@@ -177,6 +188,7 @@ export const DEFAULT_SETTINGS: Settings = {
   volume: 0.5,
   launchAtLogin: false,
   islandVisible: true,
+  showMusicControl: false,
   window: { w: 480, h: 580 }
 }
 

@@ -48,3 +48,25 @@ export function OpenIcon({ className }: IconProps): React.JSX.Element {
     </svg>
   )
 }
+
+/** 上一首：两个三角形朝左 + 一条竖线 */
+export function PrevIcon({ className }: IconProps): React.JSX.Element {
+  return (
+    <svg {...base} className={className} aria-hidden>
+      <path d="M10.2 3.4 4.6 7l5.6 3.6Z" fill="currentColor" stroke="none" />
+      <path d="M4 3.4 0.6 7 4 10.6Z" fill="currentColor" stroke="none" transform="translate(3.6 0)" />
+      <rect x="10.6" y="3.4" width="1.5" height="7.2" rx="0.7" fill="currentColor" stroke="none" />
+    </svg>
+  )
+}
+
+/** 下一首 */
+export function NextIcon({ className }: IconProps): React.JSX.Element {
+  return (
+    <svg {...base} className={className} aria-hidden>
+      <path d="M3.8 3.4 9.4 7l-5.6 3.6Z" fill="currentColor" stroke="none" />
+      <path d="M10 3.4 13.4 7 10 10.6Z" fill="currentColor" stroke="none" transform="translate(-3.6 0)" />
+      <rect x="1.9" y="3.4" width="1.5" height="7.2" rx="0.7" fill="currentColor" stroke="none" />
+    </svg>
+  )
+}

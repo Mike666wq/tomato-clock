@@ -12,6 +12,7 @@ import { Timer, type TimerAction } from './timer'
 import { createTray, type TrayController } from './tray'
 import { createIsland, type IslandController } from './island'
 import { createReminder, type ReminderController } from './reminder'
+import { createMusicController, type MediaCommand, type MusicController } from './media'
 import { getShortcutLabels, registerShortcuts, replaceShortcut, type ShortcutId } from './shortcuts'
 import { buildStats } from './stats'
 import { exportCsv } from './csv'
@@ -46,6 +47,7 @@ let island: IslandController | null = null
 let tray: TrayController | null = null
 let timer: Timer | null = null
 let reminder: ReminderController | null = null
+let music: MusicController | null = null
 let isQuitting = false
 let recordAutoClose: NodeJS.Timeout | null = null
 /** 渲染层还没加载完时收到的通知，先存着，等页面就绪再补发 */
@@ -296,6 +298,12 @@ if (!app.requestSingleInstanceLock()) {
     // 灵动岛上次被藏起来过 → 这次也不显示
     if (settings.islandVisible === false) island?.hide()
 
+    // 音乐控制：默认关，开了才拉起 SMTC 子进程（v0.2.2）
+    music = createMusicController((state) => {
+      broadcast('media:state', state)
+    })
+    if (settings.showMusicControl) music.enable()
+
     // 状态变化 → 广播给所有窗口 + 刷新托盘
     timer.subscribe((state) => {
       for (const win of BrowserWindow.getAllWindows()) {
@@ -350,6 +358,14 @@ if (!app.requestSingleInstanceLock()) {
         if (patch.islandVisible !== undefined && patch.islandVisible !== current.islandVisible) {
           if (patch.islandVisible) island?.show()
           else island?.hide()
+        }
+        // 「显示音乐控制」同样立刻生效：开 = 拉起子进程，关 = 杀掉
+        if (
+          patch.showMusicControl !== undefined &&
+          patch.showMusicControl !== current.showMusicControl
+        ) {
+          if (patch.showMusicControl) music?.enable()
+          else music?.disable()
         }
         // 切模板/改时长后，所有窗口都要知道当前模板变了
         broadcast('settings:changed', next)
@@ -426,8 +442,14 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.on('window:show', () => showWindow())
 
     // 灵动岛：收起/展开（改窗口大小后重新贴顶居中）、打开主窗口
-    ipcMain.on('island:set-mode', (_e, mode: 'collapsed' | 'expanded') => island?.setMode(mode))
+    ipcMain.on('island:set-mode', (_e, mode: 'collapsed' | 'expanded', withMusic?: boolean) =>
+      island?.setMode(mode, withMusic)
+    )
     ipcMain.on('island:open-main', () => showWindow())
+
+    // 音乐控制（v0.2.2）：状态从 SMTC 子进程来，命令也是发给它
+    ipcMain.handle('media:get-state', () => music?.getState() ?? null)
+    ipcMain.on('media:command', (_e, cmd: MediaCommand) => music?.command(cmd))
 
     registerAllShortcuts()
 
@@ -459,5 +481,6 @@ if (!app.requestSingleInstanceLock()) {
     timer?.dispose()
     tray?.destroy()
     island?.destroy()
+    music?.dispose()
   })}
 

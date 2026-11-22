@@ -324,3 +324,58 @@ html[data-paused='1'] .island__clock {
   color: var(--ink-2);
   font-size: var(--fs-tiny);
 }
+
+/* ---- 音乐控制行（v0.2.2） ----
+   展开态最下面一行：♪ 歌名 - 歌手 + 上一首/播放暂停/下一首。
+   收起态不显示这一行。歌名太长就截断加省略号，不能撑破胶囊。 */
+
+.island__music {
+  display: flex;
+  align-items: center;
+  gap: var(--island-music-gap);
+  height: var(--island-music-h);
+  margin-top: 4px;
+  /* 跟上面的当前值胶囊左边对齐（胶囊自己带 9px 内边距） */
+  margin-left: calc(var(--island-pad-x) - var(--island-chip-pad));
+  min-width: 0;
+}
+
+.island__music-note {
+  flex: none;
+  font-size: var(--fs-tiny);
+  color: var(--ink-2);
+}
+
+.island__music-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--fs-tiny);
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.island__music-btn {
+  flex: none;
+  width: var(--island-music-btn);
+  height: var(--island-music-btn);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.island__music-btn:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.island__music-btn:active {
+  background: var(--active);
+}

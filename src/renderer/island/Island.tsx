@@ -12,8 +12,8 @@
 //   Esc 逐层收回：先收回第二层，再收起整个岛
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Settings, TimerState } from '../../shared/types'
-import { OpenIcon, PauseIcon, PlayIcon, SkipIcon } from './Icons'
+import type { MediaSnapshot, Settings, TimerState } from '../../shared/types'
+import { NextIcon, OpenIcon, PauseIcon, PlayIcon, PrevIcon, SkipIcon } from './Icons'
 
 /** 悬停多久展开 */
 const HOVER_OPEN_MS = 120
@@ -39,6 +39,7 @@ export default function Island(): React.JSX.Element {
   const [hint, setHint] = useState('')
   const [editingTask, setEditingTask] = useState(false)
   const [taskDraft, setTaskDraft] = useState('')
+  const [media, setMedia] = useState<MediaSnapshot | null>(null)
   const openTimer = useRef<number | null>(null)
   const closeTimer = useRef<number | null>(null)
 
@@ -55,6 +56,15 @@ export default function Island(): React.JSX.Element {
     }
   }, [])
 
+  // 音乐状态：主进程从 SMTC 子进程拿到后广播过来
+  useEffect(() => {
+    const api = window.island
+    if (!api) return
+    void api.media.getState().then(setMedia)
+    const off = api.media.onState(setMedia)
+    return off
+  }, [])
+
   // 阶段色靠 html 上的 data 属性驱动：tokens.css 里 html[data-phase] 换 --phase，
   // 圆点、进度条都跟着变，渲染层不写死任何颜色。
   useEffect(() => {
@@ -68,8 +78,25 @@ export default function Island(): React.JSX.Element {
   const setMode = useCallback((next: boolean) => {
     setExpanded(next)
     if (!next) setLayer('idle')
-    window.island?.island.setMode(next ? 'expanded' : 'collapsed')
   }, [])
+
+  /**
+   * 展开态要不要显示音乐控制那一行。
+   * 三个条件缺一不可：设置里开了、有音乐在放、歌名或歌手至少有一个。
+   * 没开音乐软件是常态 → 那一行整个消失，不留空行、不报错。
+   */
+  const showMusic =
+    (settings?.showMusicControl ?? false) &&
+    media !== null &&
+    (media.title !== '' || media.artist !== '')
+
+  /**
+   * 窗口尺寸由主进程管，这里告诉它"要不要多一行音乐"。
+   * 音乐那一行出现/消失时胶囊高度会变，窗口必须跟着变，否则会截掉或者多一块空白。
+   */
+  useEffect(() => {
+    window.island?.island.setMode(expanded ? 'expanded' : 'collapsed', expanded && showMusic)
+  }, [expanded, showMusic])
 
   // 悬停展开 / 离开收起
   const onEnter = useCallback(() => {
@@ -167,6 +194,12 @@ export default function Island(): React.JSX.Element {
   return (
     <div
       className="island island--expanded"
+      style={
+        {
+          // 高度跟着"有没有音乐行"走，主进程那边的窗口高度用的是同一个数
+          '--island-h-expanded': showMusic ? 'var(--island-h-expanded-music)' : undefined
+        } as React.CSSProperties
+      }
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
       onClick={() => {
@@ -325,6 +358,45 @@ export default function Island(): React.JSX.Element {
           {hint ? <em className="island__hint">{hint}</em> : null}
         </span>
       )}
+
+      {showMusic && media ? (
+        <span className="island__music">
+          <span className="island__music-note">♪</span>
+          <span className="island__music-text">
+            {media.artist ? `${media.title} - ${media.artist}` : media.title}
+          </span>
+          <button
+            className="island__music-btn"
+            onClick={(e) => {
+              e.stopPropagation()
+              window.island?.media.command('prev')
+            }}
+            aria-label="上一首"
+          >
+            <PrevIcon />
+          </button>
+          <button
+            className="island__music-btn"
+            onClick={(e) => {
+              e.stopPropagation()
+              window.island?.media.command(media.playing ? 'pause' : 'play')
+            }}
+            aria-label={media.playing ? '暂停' : '播放'}
+          >
+            {media.playing ? <PauseIcon /> : <PlayIcon />}
+          </button>
+          <button
+            className="island__music-btn"
+            onClick={(e) => {
+              e.stopPropagation()
+              window.island?.media.command('next')
+            }}
+            aria-label="下一首"
+          >
+            <NextIcon />
+          </button>
+        </span>
+      ) : null}
 
       <span className="island__bar" style={{ opacity: percent > 0 ? 1 : 0.5 }}>
         <i style={{ width: `${percent}%` }} />
