@@ -70,11 +70,15 @@ export default function App(): React.JSX.Element {
     // 早于界面订阅发出的通知在这里补取
     void api.notice.take().then((list) => list.forEach((n) => (n.tone === 'warn' ? showWarn(n.text) : showNotice(n.text))))
 
+    // 主进程让切页（灵动岛右键菜单里的"设置"）
+    const offPage = api.nav.onPage((p) => setPage(p))
+
     return () => {
       offNotice()
       offOpen()
       offClose()
       offFire()
+      offPage()
     }
   }, [showNotice, showWarn])
 

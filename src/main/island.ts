@@ -20,6 +20,8 @@ const SIZE_ANIM_MS = 220
 export type IslandActions = {
   /** 打开主窗口（完整界面） */
   openMain: () => void
+  /** 打开主窗口并停在设置页 */
+  openSettings: () => void
   /** 隐藏灵动岛（托盘里能再叫回来） */
   hideIsland: () => void
   /** 退出应用 */
@@ -127,6 +129,7 @@ export function createIsland(actions: IslandActions): IslandController {
   win.webContents.on('context-menu', () => {
     Menu.buildFromTemplate([
       { label: '打开主界面', click: () => actions.openMain() },
+      { label: '设置', click: () => actions.openSettings() },
       { label: '隐藏灵动岛', click: () => actions.hideIsland() },
       { type: 'separator' },
       { label: '退出', click: () => actions.quit() }

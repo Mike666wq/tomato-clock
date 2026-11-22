@@ -261,6 +261,10 @@ if (!app.requestSingleInstanceLock()) {
     // 灵动岛：常驻贴顶的透明胶囊（v0.2）
     island = createIsland({
       openMain: () => showWindow(),
+      openSettings: () => {
+        showWindow()
+        mainWindow?.webContents.send('nav:page', 'settings')
+      },
       hideIsland: () => void setIslandVisible(false),
       quit: () => {
         isQuitting = true

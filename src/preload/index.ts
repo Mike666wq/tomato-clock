@@ -100,6 +100,16 @@ const api = {
     /** 关闭按钮：收进托盘，不退出 */
     close: (): void => ipcRenderer.send('window:close'),
     show: (): void => ipcRenderer.send('window:show')
+  },
+  nav: {
+    /** 主进程让主窗口切到某页（灵动岛右键菜单里的"设置"走这条） */
+    onPage: (cb: (page: 'timer' | 'stats' | 'settings') => void): (() => void) => {
+      const listener = (_e: unknown, page: 'timer' | 'stats' | 'settings'): void => cb(page)
+      ipcRenderer.on('nav:page', listener)
+      return () => {
+        ipcRenderer.removeListener('nav:page', listener)
+      }
+    }
   }
 }
 
