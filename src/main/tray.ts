@@ -11,6 +11,10 @@ import { log } from './logger'
 export interface TrayActions {
   toggle: () => void
   show: () => void
+  /** 灵动岛当前是否显示（决定菜单里写"隐藏"还是"显示"） */
+  islandVisible: () => boolean
+  /** 显示 / 隐藏灵动岛 */
+  toggleIsland: () => void
   quit: () => void
 }
 
@@ -68,6 +72,10 @@ export function createTray(win: BrowserWindow, actions: TrayActions): TrayContro
       { label: `${phaseLabel} · ${clock}`, enabled: false },
       { type: 'separator' },
       { label: '显示窗口', click: () => actions.show() },
+      {
+        label: actions.islandVisible() ? '隐藏灵动岛' : '显示灵动岛',
+        click: () => actions.toggleIsland()
+      },
       { type: 'separator' },
       { label: '退出', click: () => actions.quit() }
     ])

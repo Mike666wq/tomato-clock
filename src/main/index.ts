@@ -97,6 +97,15 @@ async function pushSummary(): Promise<void> {
   broadcast('records:summary', await buildSummary())
 }
 
+/** 显示 / 隐藏灵动岛，并把这个选择记进设置（下次启动照旧） */
+async function setIslandVisible(visible: boolean): Promise<void> {
+  if (visible) island?.show()
+  else island?.hide()
+  const current = await jsonStore.getSettings()
+  await jsonStore.saveSettings({ ...current, islandVisible: visible })
+  log.info(`灵动岛已${visible ? '显示' : '隐藏'}`)
+}
+
 /** 一个阶段自然跑完：落记录 + 强提醒 + 打开记录卡片 */
 async function handlePhaseComplete(info: PhaseCompleteInfo): Promise<void> {
   const session: Session = {
@@ -250,10 +259,19 @@ if (!app.requestSingleInstanceLock()) {
     mainWindow = createWindow()
     reminder = createReminder()
     // 灵动岛：常驻贴顶的透明胶囊（v0.2）
-    island = createIsland()
+    island = createIsland({
+      openMain: () => showWindow(),
+      hideIsland: () => void setIslandVisible(false),
+      quit: () => {
+        isQuitting = true
+        app.quit()
+      }
+    })
 
     const settings = await jsonStore.getSettings()
     timer = new Timer(settings)
+    // 灵动岛上次被藏起来过 → 这次也不显示
+    if (settings.islandVisible === false) island?.hide()
 
     // 状态变化 → 广播给所有窗口 + 刷新托盘
     timer.subscribe((state) => {
@@ -271,6 +289,8 @@ if (!app.requestSingleInstanceLock()) {
     tray = createTray(mainWindow!, {
       toggle: () => timer?.apply('toggle'),
       show: () => showWindow(),
+      islandVisible: () => island?.isVisible() ?? false,
+      toggleIsland: () => void setIslandVisible(!(island?.isVisible() ?? false)),
       quit: () => {
         isQuitting = true
         app.quit()

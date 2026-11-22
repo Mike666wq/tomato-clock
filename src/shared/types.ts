@@ -16,6 +16,8 @@ export type Settings = {
   soundOn: boolean
   volume: number // 0-1
   launchAtLogin: boolean
+  /** 灵动岛是否显示（托盘右键菜单可以临时藏起来） */
+  islandVisible: boolean
   window: { x?: number; y?: number; w: number; h: number }
 }
 
@@ -122,6 +124,7 @@ export const DEFAULT_SETTINGS: Settings = {
   soundOn: true,
   volume: 0.5,
   launchAtLogin: false,
+  islandVisible: true,
   window: { w: 480, h: 580 }
 }
 

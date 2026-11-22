@@ -5,7 +5,12 @@
  * 这里不出现任何硬编码色值/像素值。
  *
  * 形态：上边两角直角（贴死屏幕顶端，像从边框里长出来），
- * 下边两角圆角。窗口四周留透明余量给阴影。
+ * 下边两角圆角（收起态半圆 17px = 半高，最像灵动岛）。
+ * 窗口四周留透明余量给阴影。
+ *
+ * 毛玻璃是"伪"的（四层叠加，缺一层就不像玻璃）：
+ *   1 半透明底色  2 噪点贴图  3 顶部高光 + 下沿暗边  4 内阴影
+ * 真亚克力那条路走不通，原因记在 docs/验证方法.md 第九节。
  */
 
 html,
@@ -35,13 +40,52 @@ body {
   gap: var(--island-gap);
   background: var(--island-bg);
   border: 1px solid var(--island-edge);
-  border-top: none; /* 贴屏幕顶端，不要上边描边 */
+  /* 上边留一条透明边框：视觉上还是"没有上边线"（贴着屏幕顶端），
+     但内容盒和视觉盒一样高，内容不会偏上 0.5px */
+  border-top: 1px solid transparent;
   border-radius: 0 0 var(--island-radius) var(--island-radius);
-  box-shadow: var(--island-shadow);
+  box-shadow:
+    var(--island-shadow),
+    inset 0 1px 0 var(--island-inner),
+    inset 0 -1px 0 var(--island-bottom-edge);
   color: var(--ink);
   user-select: none;
-  cursor: default;
+  cursor: pointer;
+  overflow: hidden; /* 噪点不溢出圆角 */
 }
+
+/* 第 2 层：噪点。没有这层就是一块半透明塑料，不像玻璃 */
+.island::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-image: var(--island-noise);
+  background-size: 140px 140px;
+  opacity: 0.035;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+/* 第 3 层之一：顶部 1px 高光（玻璃上沿那一道反光） */
+.island::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--island-hairline);
+  pointer-events: none;
+}
+
+/* 内容压在噪点之上 */
+.island > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ---- 收起态 ---- */
 
 .island__dot {
   flex: none;
@@ -60,11 +104,109 @@ body {
   color: var(--ink);
 }
 
+/* ---- 展开态 ---- */
+
+.island--expanded {
+  height: var(--island-h-expanded);
+  border-radius: 0 0 var(--island-radius-expanded) var(--island-radius-expanded);
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  padding: 0 var(--island-pad-x);
+  cursor: default;
+}
+
+.island__row {
+  display: flex;
+  align-items: center;
+  gap: var(--island-gap-expanded);
+  width: 100%;
+}
+
+.island__clock {
+  flex: none;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: var(--font-num);
+  font-size: var(--island-fs-time-expanded);
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.island__clock:hover {
+  color: var(--phase);
+}
+
+.island__task {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--island-fs-task);
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.island__actions {
+  flex: none;
+  display: flex;
+  gap: var(--island-btn-gap);
+}
+
+.island__btn {
+  width: var(--island-btn);
+  height: var(--island-btn);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.island__btn:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.island__btn:active {
+  background: var(--active);
+}
+
+/* 底部进度条：贴最下沿，落在胶囊的圆角里 */
+.island__bar {
+  position: absolute;
+  left: var(--island-bar-inset);
+  right: var(--island-bar-inset);
+  bottom: var(--island-bar-bottom);
+  height: var(--island-bar-h);
+  border-radius: var(--r-pill);
+  background: var(--island-track);
+  overflow: hidden;
+}
+
+.island__bar > i {
+  display: block;
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: var(--phase);
+  transition: width 240ms linear;
+}
+
 /* 暂停：整体降不透明度，时间与圆点转灰 */
 html[data-paused='1'] .island {
   opacity: 0.75;
 }
 
-html[data-paused='1'] .island__time {
+html[data-paused='1'] .island__time,
+html[data-paused='1'] .island__clock {
   color: var(--ink-2);
 }

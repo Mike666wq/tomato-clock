@@ -54,18 +54,35 @@
   --fs-tiny: 11px; /* 圆环内的状态小标签 */
 
   /* ---- 灵动岛（屏幕顶端悬浮胶囊） ---- */
-  /* 底色由 --bg 派生，不另开色相 */
-  --island-bg: color-mix(in srgb, var(--bg) 94%, transparent);
+  /* 伪毛玻璃四层：半透明底 + 噪点 + 高光/暗边 + 内阴影（缺一层就不像玻璃） */
+  --island-bg: rgba(16, 18, 22, 0.72);
   --island-edge: color-mix(in srgb, var(--ink) 8%, transparent);
-  --island-shadow: 0 6px 16px color-mix(in srgb, var(--bg) 55%, transparent);
+  --island-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --island-hairline: rgba(255, 255, 255, 0.1);
+  --island-bottom-edge: rgba(0, 0, 0, 0.35);
+  --island-inner: rgba(255, 255, 255, 0.06);
+  /* 噪点贴图：SVG feTurbulence，opacity 0.035 + mix-blend-mode: overlay */
+  --island-noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
   --island-w: 172px;
   --island-h: 34px;
-  --island-radius: 20px;
+  --island-h-expanded: 76px;
+  --island-radius: 17px; /* 收起态下沿做半圆（半高 17px），最像灵动岛 */
+  --island-radius-expanded: 20px; /* 展开态半高 38px 太大，像面包 */
   --island-side-pad: 8px;
   --island-bottom-pad: 14px;
   --island-gap: 9px;
-  --island-dot: 7px;
+  --island-gap-expanded: 12px;
+  --island-dot: 8px;
   --island-fs-time: 17px;
+  --island-fs-time-expanded: 34px;
+  --island-fs-task: 13px;
+  --island-pad-x: 14px;
+  --island-btn: 26px;
+  --island-btn-gap: 2px;
+  --island-bar-h: 2px;
+  --island-bar-inset: 12px;
+  --island-bar-bottom: 6px;
+  --island-track: color-mix(in srgb, var(--ink) 10%, transparent);
 
   /* ---- 动效 ---- */
   --ease: cubic-bezier(0.4, 0, 0.2, 1);

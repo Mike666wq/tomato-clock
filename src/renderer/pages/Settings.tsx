@@ -13,6 +13,7 @@ const DEFAULTS: Settings = {
   soundOn: true,
   volume: 0.5,
   launchAtLogin: false,
+  islandVisible: true,
   window: { w: 480, h: 580 }
 }
 
