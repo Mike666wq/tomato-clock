@@ -77,6 +77,26 @@ jobs:
             Write-Host "没有 win-unpacked，跳过压缩包"
           }
 
+      # 中文文件名上传到 Release 会被吞掉（实测：`番茄钟 Setup 0.2.3.exe`
+      # 变成 `Setup.0.2.3.exe`，`番茄钟-0.2.3-免安装.zip` 变成 `-0.2.3-.zip`），
+      # 用户下载下来根本不知道是什么。所以上传前统一复制成 ASCII 名，
+      # 本地构建仍然保留中文名，只有线上附件用这套。
+      - name: 复制成 ASCII 文件名（供 Release 上传）
+        shell: pwsh
+        run: |
+          $v = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $out = 'release\upload'
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          Get-ChildItem release -File | Where-Object { $_.Extension -in '.exe', '.zip' } | ForEach-Object {
+            $target =
+              if ($_.Name -like '*Setup*')      { "tomato-clock-$v-setup$($_.Extension)" }
+              elseif ($_.Name -like '*免安装*') { "tomato-clock-$v-portable$($_.Extension)" }
+              else                              { "tomato-clock-$v-portable-single$($_.Extension)" }
+            Copy-Item $_.FullName (Join-Path $out $target) -Force
+            Write-Host "$($_.Name)  ->  $target"
+          }
+          Get-ChildItem $out -File | Select-Object Name, @{n='MB';e={[math]::Round($_.Length/1MB,1)}}
+
       - name: 列出产物
         run: Get-ChildItem release -Recurse -File | Select-Object FullName, @{n='MB';e={[math]::Round($_.Length/1MB,1)}}
 
@@ -96,8 +116,8 @@ jobs:
             由 master 每次推送自动覆盖更新，**不是正式版本**，随时可能被下一个构建替换。
             要稳定版本请到正式 Release 里下带版本号的那个。
           files: |
-            release/*.exe
-            release/*.zip
+            release/upload/*.exe
+            release/upload/*.zip
           fail_on_unmatched_files: true
 
       # 注意：自己写 if: 会顶掉 GitHub 默认的 success() 判断——
@@ -108,8 +128,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            release/*.exe
-            release/*.zip
+            release/upload/*.exe
+            release/upload/*.zip
           generate_release_notes: true
           # 附件对不上就失败，别留一个空 Release 骗人
           fail_on_unmatched_files: true
