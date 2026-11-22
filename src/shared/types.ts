@@ -1,6 +1,10 @@
 // 主进程与渲染进程共用的类型定义。
 // 这里只放"数据形状"，不放任何业务逻辑。
 
+import { BUILTIN_PRESETS, DEFAULT_PRESET_ID, type Preset, type TimerConfig } from './presets'
+
+export type { Preset, TimerConfig }
+
 /** 计时阶段 */
 export type PhaseKind = 'focus' | 'short' | 'long'
 
@@ -8,10 +12,10 @@ export type PhaseKind = 'focus' | 'short' | 'long'
 export type InterruptKind = 'none' | 'internal' | 'external'
 
 export type Settings = {
-  focusMin: number // 默认 25
-  shortBreakMin: number // 默认 5
-  longBreakMin: number // 默认 15
-  roundsBeforeLong: number // 默认 4
+  /** 当前模板（v0.3-a 起，时长由模板决定，不再是散字段） */
+  activePresetId: string
+  /** 所有模板：内置四个 + 自定义的 */
+  presets: Preset[]
   autoStartNext: boolean // 默认 false（自用先不自动，避免被迫开始）
   soundOn: boolean
   volume: number // 0-1
@@ -116,16 +120,33 @@ export type AppData = {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  focusMin: 25,
-  shortBreakMin: 5,
-  longBreakMin: 15,
-  roundsBeforeLong: 4,
+  activePresetId: DEFAULT_PRESET_ID,
+  presets: BUILTIN_PRESETS.map((p) => ({ ...p })),
   autoStartNext: false,
   soundOn: true,
   volume: 0.5,
   launchAtLogin: false,
   islandVisible: true,
   window: { w: 480, h: 580 }
+}
+
+/**
+ * 从设置里取出计时器真正需要的配置。
+ *
+ * 时长全部来自"当前模板"；这样切模板时只要换 activePresetId，
+ * 计时器下一段自然就用新模板（切换规则：只影响下一段）。
+ */
+export function timerConfigOf(settings: Settings): TimerConfig {
+  const p = settings.presets.find((x) => x.id === settings.activePresetId)
+  const fallback = BUILTIN_PRESETS[0]
+  const src = p ?? fallback
+  return {
+    focusMin: src.focusMin,
+    shortMin: src.shortMin,
+    longMin: src.longMin,
+    roundsBeforeLong: src.roundsBeforeLong,
+    autoStartNext: settings.autoStartNext
+  }
 }
 
 export const PHASE_LABEL: Record<PhaseKind, string> = {

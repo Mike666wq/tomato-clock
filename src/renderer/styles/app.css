@@ -712,3 +712,140 @@ button {
   border-color: color-mix(in srgb, var(--warn) 55%, var(--line));
   color: var(--warn);
 }
+
+/* ---- 计时模板（v0.3-a） ---- */
+
+.presets {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 2px;
+  flex-wrap: wrap;
+}
+
+.presets__chip {
+  height: 26px;
+  padding: 0 12px;
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease);
+}
+
+.presets__chip:hover {
+  color: var(--ink);
+  background: var(--hover);
+}
+
+.presets__chip--on {
+  color: var(--on-phase);
+  background: var(--phase);
+  border-color: var(--phase);
+}
+
+.presets__hint {
+  font-size: var(--fs-tiny);
+  color: var(--ink-2);
+  margin-left: 2px;
+}
+
+.preset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.preset-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+}
+
+.preset-row--on {
+  border-color: var(--phase);
+  background: var(--phase-faint);
+}
+
+.preset-row__name {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--ink);
+  font-size: var(--fs-body);
+  cursor: pointer;
+}
+
+.preset-row__name em {
+  margin-left: 6px;
+  font-style: normal;
+  font-size: var(--fs-tiny);
+  color: var(--phase);
+}
+
+.preset-row__nums {
+  flex: 1;
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+}
+
+.preset-row__ops {
+  display: flex;
+  gap: 4px;
+}
+
+.preset-row__ops button {
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--ink-2);
+  font-size: var(--fs-tiny);
+  padding: 3px 8px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+
+.preset-row__ops button:hover {
+  color: var(--ink);
+  background: var(--hover);
+}
+
+.preset-editor {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.preset-editor__name {
+  flex: 1;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--ink);
+  padding: 7px 10px;
+  font-size: var(--fs-body);
+}
+
+.preset-editor__name:focus {
+  outline: none;
+  border-color: var(--phase);
+}
+
+.preset-editor__error {
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--warn);
+}
+
+.preset-editor__ops {
+  display: flex;
+  gap: 8px;
+}

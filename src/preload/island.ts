@@ -4,7 +4,7 @@
 // 避免浮层上误触到主窗口专属的动作。
 
 import { contextBridge, ipcRenderer } from 'electron'
-import type { TimerState } from '../shared/types'
+import type { Settings, TimerState } from '../shared/types'
 import type { IslandMode } from '../shared/island'
 
 const api = {
@@ -28,6 +28,19 @@ const api = {
     setMode: (mode: IslandMode): void => ipcRenderer.send('island:set-mode', mode),
     /** 打开主窗口（完整界面） */
     openMain: (): void => ipcRenderer.send('island:open-main')
+  },
+  settings: {
+    /** 读设置（灵动岛要显示当前模板、切换模板） */
+    get: (): Promise<Settings> => ipcRenderer.invoke('settings:get'),
+    /** 切模板：改 activePresetId 即可，计时器那边按"只影响下一段"处理 */
+    save: (patch: Partial<Settings>): void => ipcRenderer.send('settings:save', patch),
+    onChanged: (cb: (s: Settings) => void): (() => void) => {
+      const listener = (_e: unknown, s: Settings): void => cb(s)
+      ipcRenderer.on('settings:changed', listener)
+      return () => {
+        ipcRenderer.removeListener('settings:changed', listener)
+      }
+    }
   }
 }
 

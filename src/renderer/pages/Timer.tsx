@@ -6,8 +6,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Ring } from '../components/Ring'
 import { Controls } from '../components/TimerControls'
+import { PresetBar } from '../components/PresetBar'
 import { keyCapture } from '../keyCapture'
-import { PHASE_LABEL, type RecordSummary, type TimerState } from '../../shared/types'
+import { PHASE_LABEL, type RecordSummary, type Settings, type TimerState } from '../../shared/types'
 
 const FALLBACK: TimerState = {
   phase: 'focus',
@@ -30,6 +31,7 @@ function format(sec: number): string {
 export function Timer(): React.JSX.Element {
   const [state, setState] = useState<TimerState>(FALLBACK)
   const [summary, setSummary] = useState<RecordSummary>(EMPTY_SUMMARY)
+  const [settings, setSettings] = useState<Settings | null>(null)
   const [breathe, setBreathe] = useState(false)
   const wasRunning = useRef(false)
 
@@ -39,11 +41,14 @@ export function Timer(): React.JSX.Element {
     if (!api) return
     void api.timer.getState().then(setState)
     void api.records.summary().then(setSummary)
+    void api.settings.get().then(setSettings)
     const offState = api.timer.onState(setState)
     const offSummary = api.records.onSummary(setSummary)
+    const offSettings = api.settings.onChanged(setSettings)
     return () => {
       offState()
       offSummary()
+      offSettings()
     }
   }, [])
 
@@ -93,6 +98,15 @@ export function Timer(): React.JSX.Element {
       </Ring>
 
       <Controls running={state.running} onToggle={toggle} onSkip={skip} onReset={reset} />
+
+      {settings && settings.presets.length > 0 ? (
+        <PresetBar
+          presets={settings.presets}
+          activeId={settings.activePresetId}
+          running={state.running}
+          onPick={(id) => window.pomodoro?.settings.save({ activePresetId: id })}
+        />
+      ) : null}
 
       <div className="status">
         <span className="status__dot">●</span> 今日 {summary.todayCount} 个番茄 · 今日专注 {todayMin} 分钟 ·

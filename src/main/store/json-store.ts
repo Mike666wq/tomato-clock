@@ -4,9 +4,10 @@ import { app } from 'electron'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { DEFAULT_SETTINGS, type AppData } from '../../shared/types'
+import { BUILTIN_PRESETS, DEFAULT_PRESET_ID, makePreset } from '../../shared/presets'
 import type { Store } from './index'
 
-const SCHEMA_VERSION = 1
+const SCHEMA_VERSION = 2
 
 function dataDir(): string {
   return app.getPath('userData')
@@ -20,15 +21,68 @@ function defaultData(): AppData {
   return { schemaVersion: SCHEMA_VERSION, settings: { ...DEFAULT_SETTINGS }, sessions: [] }
 }
 
+/**
+ * 数据迁移。必须幂等：跑两次不能重复处理。
+ *
+ * v1 → v2：设置里的 focusMin / shortBreakMin / longBreakMin / roundsBeforeLong
+ * 这四个散字段，打包成一个名叫"我的设置"的模板并设为当前模板，
+ * 老用户打开还是原来的时长。顺便补上四个内置模板。
+ */
+function migrate(data: AppData): { data: AppData; changed: boolean } {
+  if (data.schemaVersion >= SCHEMA_VERSION) return { data, changed: false }
+
+  const legacy = data.settings as unknown as Record<string, unknown>
+  const presets = BUILTIN_PRESETS.map((p) => ({ ...p }))
+  let activePresetId = DEFAULT_PRESET_ID
+
+  if (typeof legacy['focusMin'] === 'number') {
+    const mine = makePreset(
+      {
+        name: '我的设置',
+        focusMin: Number(legacy['focusMin']) || 25,
+        shortMin: Number(legacy['shortBreakMin']) || 5,
+        longMin: Number(legacy['longBreakMin']) || 15,
+        roundsBeforeLong: Number(legacy['roundsBeforeLong']) || 4
+      },
+      'preset-mine',
+      false,
+      presets.length
+    )
+    presets.push(mine)
+    activePresetId = mine.id
+  }
+
+  const {
+    focusMin: _f,
+    shortBreakMin: _s,
+    longBreakMin: _l,
+    roundsBeforeLong: _r,
+    ...rest
+  } = legacy as Record<string, unknown>
+
+  data.settings = {
+    ...DEFAULT_SETTINGS,
+    ...(rest as Partial<AppData['settings']>),
+    presets,
+    activePresetId
+  } as AppData['settings']
+  data.schemaVersion = SCHEMA_VERSION
+  return { data, changed: true }
+}
+
 async function readRaw(): Promise<AppData> {
   try {
     const text = await fs.readFile(dataFile(), 'utf-8')
     const parsed = JSON.parse(text) as Partial<AppData>
-    return {
-      schemaVersion: parsed.schemaVersion ?? SCHEMA_VERSION,
-      settings: { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}) },
+    const merged: AppData = {
+      schemaVersion: parsed.schemaVersion ?? 1,
+      settings: { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}) } as AppData['settings'],
       sessions: Array.isArray(parsed.sessions) ? parsed.sessions : []
     }
+    const result = migrate(merged)
+    // 迁移完立刻落盘，免得每次启动都重跑一遍
+    if (result.changed) await writeRaw(result.data)
+    return result.data
   } catch {
     return defaultData()
   }

@@ -2,13 +2,13 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { keyCapture } from '../keyCapture'
-import type { Settings, ShortcutDef, TimerState } from '../../shared/types'
+import { PresetManager } from '../components/PresetManager'
+import { BUILTIN_PRESETS } from '../../shared/presets'
+import type { Settings, ShortcutDef } from '../../shared/types'
 
 const DEFAULTS: Settings = {
-  focusMin: 25,
-  shortBreakMin: 5,
-  longBreakMin: 15,
-  roundsBeforeLong: 4,
+  activePresetId: 'builtin-classic',
+  presets: BUILTIN_PRESETS.map((p) => ({ ...p })),
   autoStartNext: false,
   soundOn: true,
   volume: 0.5,
@@ -27,7 +27,6 @@ export function SettingsPage({ onNotice }: Props): React.JSX.Element {
   const [shortcuts, setShortcuts] = useState<ShortcutDef[]>([])
   const [capturing, setCapturing] = useState<ShortcutDef['id'] | null>(null)
   const [exporting, setExporting] = useState(false)
-  const [running, setRunning] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -35,8 +34,8 @@ export function SettingsPage({ onNotice }: Props): React.JSX.Element {
     if (!api) return
     void api.settings.get().then(setSettings)
     void api.shortcuts.get().then(setShortcuts)
-    // 计时是否在跑：用于提示"改时长只影响下一段"
-    const off = api.timer.onState((s) => setRunning(s.running))
+    // 设置变了（切模板等）就刷新
+    const off = api.settings.onChanged(setSettings)
     return off
   }, [])
 
@@ -92,64 +91,13 @@ export function SettingsPage({ onNotice }: Props): React.JSX.Element {
 
   return (
     <div className="main main--page" ref={rootRef}>
-      <section className="card">
-        <h3 className="card__title">时长</h3>
-        <div className="field">
-          <label>专注</label>
-          <div className="field__num">
-            <input
-              type="number"
-              min={1}
-              max={120}
-              value={settings.focusMin}
-              onChange={(e) => patch({ focusMin: Math.max(1, Number(e.target.value) || 1) })}
-            />
-            <span>分钟</span>
-          </div>
-        </div>
-        <div className="field">
-          <label>短休</label>
-          <div className="field__num">
-            <input
-              type="number"
-              min={1}
-              max={60}
-              value={settings.shortBreakMin}
-              onChange={(e) => patch({ shortBreakMin: Math.max(1, Number(e.target.value) || 1) })}
-            />
-            <span>分钟</span>
-          </div>
-        </div>
-        <div className="field">
-          <label>长休</label>
-          <div className="field__num">
-            <input
-              type="number"
-              min={1}
-              max={60}
-              value={settings.longBreakMin}
-              onChange={(e) => patch({ longBreakMin: Math.max(1, Number(e.target.value) || 1) })}
-            />
-            <span>分钟</span>
-          </div>
-        </div>
-        <div className="field">
-          <label>几个番茄后长休</label>
-          <div className="field__num">
-            <input
-              type="number"
-              min={1}
-              max={12}
-              value={settings.roundsBeforeLong}
-              onChange={(e) => patch({ roundsBeforeLong: Math.max(1, Number(e.target.value) || 1) })}
-            />
-            <span>轮</span>
-          </div>
-        </div>
-        {running ? (
-          <div className="card__note">计时进行中，改时长只影响下一段，当前这一段不变。</div>
-        ) : null}
-      </section>
+      <PresetManager
+        presets={settings.presets}
+        activeId={settings.activePresetId}
+        onPresets={(presets) => patch({ presets })}
+        onActivate={(id) => patch({ activePresetId: id })}
+        onNotice={onNotice}
+      />
 
       <section className="card">
         <h3 className="card__title">提醒</h3>
@@ -215,5 +163,3 @@ export function SettingsPage({ onNotice }: Props): React.JSX.Element {
     </div>
   )
 }
-
-export type { TimerState }

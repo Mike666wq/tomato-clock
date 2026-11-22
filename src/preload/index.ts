@@ -82,7 +82,15 @@ const api = {
   },
   settings: {
     get: (): Promise<Settings> => ipcRenderer.invoke('settings:get'),
-    save: (patch: Partial<Settings>): void => ipcRenderer.send('settings:save', patch)
+    save: (patch: Partial<Settings>): void => ipcRenderer.send('settings:save', patch),
+    /** 设置变了（切模板等），所有窗口都要刷新 */
+    onChanged: (cb: (s: Settings) => void): (() => void) => {
+      const listener = (_e: unknown, s: Settings): void => cb(s)
+      ipcRenderer.on('settings:changed', listener)
+      return () => {
+        ipcRenderer.removeListener('settings:changed', listener)
+      }
+    }
   },
   stats: {
     get: (): Promise<StatsData> => ipcRenderer.invoke('stats:get')

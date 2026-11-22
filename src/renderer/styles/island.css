@@ -201,12 +201,50 @@ body {
   transition: width 240ms linear;
 }
 
-/* 暂停：整体降不透明度，时间与圆点转灰 */
+/* 暂停：整体降不透明度，时间与圆点转灰。
+   别降太多：底色本来就靠不透明度压深，降到 0.75 会让岛在亮壁纸上发灰 */
 html[data-paused='1'] .island {
-  opacity: 0.75;
+  opacity: 0.92;
 }
 
 html[data-paused='1'] .island__time,
 html[data-paused='1'] .island__clock {
   color: var(--ink-2);
+}
+
+/* ---- 计时模板（v0.3-a）：灵动岛里的一排小胶囊 ---- */
+
+.island__presets {
+  display: flex;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.island__preset {
+  height: 20px;
+  padding: 0 7px;
+  font-size: var(--fs-tiny);
+  color: var(--ink-2);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.island__preset:hover {
+  color: var(--ink);
+  background: var(--hover);
+}
+
+.island__preset--on {
+  color: var(--on-phase);
+  background: var(--phase);
+  border-color: var(--phase);
+}
+
+.island__hint {
+  font-style: normal;
+  color: var(--ink-2);
+  font-size: var(--island-fs-task);
 }

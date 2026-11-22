@@ -9,12 +9,13 @@
 //   activeSec     本阶段实际"跑起来"的秒数，暂停期间不增长
 //   actualSec     阶段结束时写进记录的秒数 = 已跑秒数（已扣掉暂停）
 
-import { PHASE_LABEL, type PhaseKind, type PhaseCompleteInfo, type Settings, type TimerState } from '../shared/types'
+import { PHASE_LABEL, type PhaseKind, type PhaseCompleteInfo, type TimerState } from '../shared/types'
+import type { TimerConfig } from '../shared/presets'
 
 export type TimerAction = 'toggle' | 'start' | 'pause' | 'skip' | 'reset'
 
 export class Timer {
-  private settings: Settings
+  private cfg: TimerConfig
   private phase: PhaseKind = 'focus'
   private running = false
   private endsAt: number | null = null
@@ -38,8 +39,8 @@ export class Timer {
   /** 本次暂停的开始时刻 */
   private pauseStartedAt: number | null = null
 
-  constructor(settings: Settings) {
-    this.settings = settings
+  constructor(cfg: TimerConfig) {
+    this.cfg = cfg
     this.remainingSecCached = this.phaseSec('focus')
     this.segmentTotalSec = this.remainingSecCached
 
@@ -88,14 +89,18 @@ export class Timer {
   }
 
   /**
-   * 设置变化时调用（时长、轮数等）。
+   * 配置变化时调用（切模板、改自动开始等）。
    *
    * 规则（肥鱼定死）：计时进行中修改时长，只影响下一段，当前段不变。
    * 当前段的 segmentTotalSec 与剩余时间都不动，所以圆环也不会跳。
    * 只有"这一段还没开始跑"（不计时、也没消耗过）时才立刻生效。
+   *
+   * 切模板同理：休息段里换了模板，下一段（下一个专注）用新模板的时长，
+   * 而这一段休息的长度不变 —— 因为 advance() 是在段落真正开始时
+   * 现读 this.cfg，不是缓存的初始值。
    */
-  updateSettings(settings: Settings): void {
-    this.settings = settings
+  updateSettings(cfg: TimerConfig): void {
+    this.cfg = cfg
     const newTotal = this.phaseSec(this.phase)
     const notStarted = !this.running && this.remainingSecCached === this.segmentTotalSec
     if (notStarted && newTotal !== this.segmentTotalSec) {
@@ -138,10 +143,10 @@ export class Timer {
   private phaseSec(phase: PhaseKind): number {
     const min =
       phase === 'focus'
-        ? this.settings.focusMin
+        ? this.cfg.focusMin
         : phase === 'short'
-          ? this.settings.shortBreakMin
-          : this.settings.longBreakMin
+          ? this.cfg.shortMin
+          : this.cfg.longMin
     return Math.max(1, min) * 60
   }
 
@@ -239,7 +244,7 @@ export class Timer {
     // 阶段流转：专注 → (每 roundsBeforeLong 轮一次长休) 短休 → 专注
     let next: PhaseKind = 'focus'
     if (finished === 'focus') {
-      next = this.focusRounds % this.settings.roundsBeforeLong === 0 ? 'long' : 'short'
+      next = this.focusRounds % this.cfg.roundsBeforeLong === 0 ? 'long' : 'short'
     }
 
     this.phase = next
@@ -253,7 +258,7 @@ export class Timer {
     this.remainingSecCached = this.segmentTotalSec
     this.emit()
 
-    if (this.settings.autoStartNext) {
+    if (this.cfg.autoStartNext) {
       this.start()
     }
   }

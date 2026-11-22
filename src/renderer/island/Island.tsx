@@ -10,7 +10,7 @@
 //   Esc 收起
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { TimerState } from '../../shared/types'
+import type { Settings, TimerState } from '../../shared/types'
 import { OpenIcon, PauseIcon, PlayIcon, SkipIcon } from './Icons'
 
 /** 悬停多久展开 */
@@ -28,7 +28,9 @@ function formatTime(sec: number): string {
 
 export default function Island(): React.JSX.Element {
   const [state, setState] = useState<TimerState | null>(null)
+  const [settings, setSettings] = useState<Settings | null>(null)
   const [expanded, setExpanded] = useState(false)
+  const [hint, setHint] = useState('')
   const openTimer = useRef<number | null>(null)
   const closeTimer = useRef<number | null>(null)
 
@@ -36,7 +38,13 @@ export default function Island(): React.JSX.Element {
     const api = window.island
     if (!api) return
     void api.timer.getState().then(setState)
-    return api.timer.onState(setState)
+    void api.settings.get().then(setSettings)
+    const offState = api.timer.onState(setState)
+    const offSettings = api.settings.onChanged(setSettings)
+    return () => {
+      offState()
+      offSettings()
+    }
   }, [])
 
   // 阶段色靠 html 上的 data 属性驱动：tokens.css 里 html[data-phase] 换 --phase，
@@ -89,6 +97,15 @@ export default function Island(): React.JSX.Element {
   const toggle = (): void => window.island?.timer.action('toggle')
   const skip = (): void => window.island?.timer.action('skip')
   const openMain = (): void => window.island?.island.openMain()
+
+  /** 切模板：只影响下一段，跑着的时候给一句轻提示 */
+  const pickPreset = (id: string): void => {
+    window.island?.settings.save({ activePresetId: id })
+    if (state?.running) {
+      setHint('下一段生效')
+      window.setTimeout(() => setHint(''), 2000)
+    }
+  }
 
   /**
    * 收起态单击 = 开始 / 暂停，不展开。
@@ -150,7 +167,32 @@ export default function Island(): React.JSX.Element {
         >
           {formatTime(remaining)}
         </button>
-        <span className="island__task">添加任务…</span>
+        <span className="island__task">
+          {hint ? (
+            <em className="island__hint">{hint}</em>
+          ) : (
+            <span className="island__presets">
+              {[...(settings?.presets ?? [])]
+                .sort((a, b) => a.order - b.order)
+                .slice(0, 5)
+                .map((p) => (
+                  <button
+                    key={p.id}
+                    className={
+                      p.id === settings?.activePresetId ? 'island__preset island__preset--on' : 'island__preset'
+                    }
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      pickPreset(p.id)
+                    }}
+                    title={`专注 ${p.focusMin} · 短休 ${p.shortMin} · 长休 ${p.longMin} 分钟`}
+                  >
+                    {p.name}
+                  </button>
+                ))}
+            </span>
+          )}
+        </span>
         <span className="island__actions">
           <button
             className="island__btn"

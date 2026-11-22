@@ -19,6 +19,7 @@ import { log } from './logger'
 import {
   DEFAULT_SETTINGS,
   PHASE_LABEL,
+  timerConfigOf,
   type InterruptKind,
   type Notice,
   type PhaseCompleteInfo,
@@ -273,7 +274,7 @@ if (!app.requestSingleInstanceLock()) {
     })
 
     const settings = await jsonStore.getSettings()
-    timer = new Timer(settings)
+    timer = new Timer(timerConfigOf(settings))
     // 灵动岛上次被藏起来过 → 这次也不显示
     if (settings.islandVisible === false) island?.hide()
 
@@ -319,12 +320,14 @@ if (!app.requestSingleInstanceLock()) {
 
     ipcMain.handle('settings:get', () => jsonStore.getSettings())
 
-    // 保存设置。计时进行中改时长只影响下一段（Timer 内部处理），这里只落盘 + 通知计时器
+    // 保存设置。计时进行中改时长/切模板只影响下一段（Timer 内部处理），这里只落盘 + 通知计时器
     ipcMain.on('settings:save', (_e, patch: Partial<Settings>) => {
       void jsonStore.getSettings().then(async (current) => {
         const next: Settings = { ...current, ...patch }
         await jsonStore.saveSettings(next)
-        timer?.updateSettings(next)
+        timer?.updateSettings(timerConfigOf(next))
+        // 切模板/改时长后，所有窗口都要知道当前模板变了
+        broadcast('settings:changed', next)
         if (patch.launchAtLogin !== undefined && patch.launchAtLogin !== current.launchAtLogin) {
           try {
             app.setLoginItemSettings({
