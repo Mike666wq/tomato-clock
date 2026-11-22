@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    灵动岛的媒体控制小工具（v0.4）。
+    TFM 用 net8.0-windows10.0.19041.0：这样 WinRT 投影由 .NET SDK 自带，
+    不会再遇到裸 csc 那个 "Windows, Version=255.255.255.255" 的程序集解析问题。
+    （PowerShell 5.1 的投影只投得出会话管理器，Session / MediaPlaybackProperties 是空壳。）
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <AssemblyName>smtc</AssemblyName>
+    <RootNamespace>SmtcTool</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+</Project>

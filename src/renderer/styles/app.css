@@ -1151,3 +1151,49 @@ button {
   opacity: 0.65;
   margin-left: 4px;
 }
+
+/* ---------- 主界面（计时页）的纵向布局（v0.2.1 修） ----------
+   顶部固定 / 中部自适应 / 底部一组固定贴底。
+   导航栏永远在最下面，任何情况下都不许被内容压住。 */
+
+.app {
+  /* 内容不许溢出盖住导航栏 */
+  overflow: hidden;
+}
+
+.main--timer {
+  padding: 4px var(--pad-x) 8px;
+  overflow: hidden;
+}
+
+/* 中部：装得下就居中，装不下就滚 */
+.timer__ring {
+  flex: 1 1 auto;
+  min-height: 0;
+  /* .main 是 align-items:center，不给整行宽的话这一格会被收缩成内容宽 */
+  width: 100%;
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* 底部：按钮 + 模板条 + 主题行 + 状态行，整体固定贴底 */
+.timer__bottom {
+  flex: 0 0 auto;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* 数字跟着环一起缩，不然小环里塞不下大数字 */
+.ring__time {
+  font-size: calc(var(--ring-size) * 0.2875);
+}
+
+/* 状态行不再靠 margin-top:auto 顶底（在底部组里自然排） */
+.timer__bottom .status {
+  margin-top: 0;
+  padding-top: 10px;
+}

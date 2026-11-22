@@ -37,7 +37,32 @@ export function Timer(): React.JSX.Element {
   const [summary, setSummary] = useState<RecordSummary>(EMPTY_SUMMARY)
   const [settings, setSettings] = useState<Settings | null>(null)
   const [breathe, setBreathe] = useState(false)
+  const [ringSize, setRingSize] = useState(320)
+  const ringAreaRef = useRef<HTMLDivElement>(null)
   const wasRunning = useRef(false)
+
+  /**
+   * 圆环按可用空间缩放，不能写死。
+   * 之前写死 320px，用户把窗口缩到 500×589 之后环把下面全顶出去了，
+   * 模板条压到导航栏上、状态行被挤没 —— 那是我的锅。
+   * 规则：min(420, 可用宽 - 96, 可用高 × 0.52)，最小 200。
+   */
+  useEffect(() => {
+    const el = ringAreaRef.current
+    if (!el) return
+    const measure = (): void => {
+      const w = el.clientWidth
+      const h = el.clientHeight
+      // 0.78：这个区域现在只装圆环（按钮那组在它下面单独占位），
+      // 早先用 0.52 是怕压到底下的东西，现在结构上压不到了，可以放大
+      const next = Math.max(200, Math.min(420, w - 96, h * 0.78))
+      setRingSize(Math.round(next))
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   // 订阅主进程状态
   useEffect(() => {
@@ -102,36 +127,42 @@ export function Timer(): React.JSX.Element {
   const hint = state.running ? '进行中' : state.activeSec > 0 ? '已暂停' : '准备开始'
 
   return (
-    <div className="main">
+    <div className="main main--timer">
       <div className="phase-label">{PHASE_LABEL[state.phase]}</div>
 
-      <Ring total={state.totalSec} remaining={state.remainingSec} breathe={breathe}>
-        <div className="ring__time">{format(state.remainingSec)}</div>
-        <div className="ring__hint">{hint}</div>
-      </Ring>
+      {/* 中部：自适应高度，装不下就滚，绝不压到底下的东西 */}
+      <div className="timer__ring" ref={ringAreaRef}>
+        <Ring total={state.totalSec} remaining={state.remainingSec} breathe={breathe} size={ringSize}>
+          <div className="ring__time">{format(state.remainingSec)}</div>
+          <div className="ring__hint">{hint}</div>
+        </Ring>
+      </div>
 
-      <Controls running={state.running} onToggle={toggle} onSkip={skip} onReset={reset} />
+      {/* 底部：固定贴底的一组 */}
+      <div className="timer__bottom">
+        <Controls running={state.running} onToggle={toggle} onSkip={skip} onReset={reset} />
 
-      {settings && settings.presets.length > 0 ? (
-        <PresetBar
-          presets={settings.presets}
-          activeId={settings.activePresetId}
-          running={state.running}
-          onPick={(id) => window.pomodoro?.settings.save({ activePresetId: id })}
-        />
-      ) : null}
+        {settings && settings.presets.length > 0 ? (
+          <PresetBar
+            presets={settings.presets}
+            activeId={settings.activePresetId}
+            running={state.running}
+            onPick={(id) => window.pomodoro?.settings.save({ activePresetId: id })}
+          />
+        ) : null}
 
-      {settings ? (
-        <TopicBar
-          topics={settings.topics ?? []}
-          activeId={state.topicId ?? null}
-          onPick={(id) => window.pomodoro?.settings.save({ activeTopicId: id })}
-        />
-      ) : null}
+        {settings ? (
+          <TopicBar
+            topics={settings.topics ?? []}
+            activeId={state.topicId ?? null}
+            onPick={(id) => window.pomodoro?.settings.save({ activeTopicId: id })}
+          />
+        ) : null}
 
-      <div className="status">
-        <span className="status__dot">●</span> 今日 {summary.todayCount} 个番茄 · 今日专注 {todayMin} 分钟 ·
-        累计 {totalMin} 分钟
+        <div className="status">
+          <span className="status__dot">●</span> 今日 {summary.todayCount} 个番茄 · 今日专注 {todayMin} 分钟 ·
+          累计 {totalMin} 分钟
+        </div>
       </div>
     </div>
   )

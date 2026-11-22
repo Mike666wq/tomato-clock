@@ -37,6 +37,10 @@ const WINDOW_BG = '#0E1013'
 /** 记录卡片等不到人回应就自动落记录的时限 */
 const RECORD_AUTO_CLOSE_MS = 60_000
 
+/** 窗口最小尺寸。再小的话圆环和底部那组就挤不下了 */
+const MIN_WIN_W = 420
+const MIN_WIN_H = 560
+
 let mainWindow: BrowserWindow | null = null
 let island: IslandController | null = null
 let tray: TrayController | null = null
@@ -158,8 +162,8 @@ function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
     width: DEFAULT_SETTINGS.window.w,
     height: DEFAULT_SETTINGS.window.h,
-    minWidth: 420,
-    minHeight: 520,
+    minWidth: MIN_WIN_W,
+    minHeight: MIN_WIN_H,
     frame: false,
     show: false,
     backgroundColor: WINDOW_BG,
@@ -181,7 +185,13 @@ function createWindow(): BrowserWindow {
     const y =
       typeof w.y === 'number' ? Math.min(Math.max(w.y, area.y), area.y + area.height - 100) : undefined
     if (x !== undefined && y !== undefined) win.setPosition(x, y)
-    if (w.w && w.h) win.setSize(Math.max(w.w, 420), Math.max(w.h, 520))
+    // 记住的尺寸可能比最小尺寸还小（旧版本存进去的）——强行修正，
+    // 不然一启动就是一个塞不下的窗口
+    if (w.w && w.h) {
+      const width = Math.max(w.w, MIN_WIN_W)
+      const height = Math.min(Math.max(w.h, MIN_WIN_H), area.height)
+      win.setSize(width, height)
+    }
   })
 
   win.once('ready-to-show', () => win.show())

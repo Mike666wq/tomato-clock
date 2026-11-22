@@ -7,3 +7,7 @@ release/
 .vite/
 
 *.tsbuildinfo
+
+# .NET 工具的构建产物（tools/smtc）
+tools/smtc/bin/
+tools/smtc/obj/
