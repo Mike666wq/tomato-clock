@@ -65,7 +65,15 @@ export function ThemePicker({ theme, mode, onPick }: Props): React.JSX.Element {
               data-mode={t.modes.includes('light') ? 'light' : 'dark'}
             >
               <svg className="theme-card__ring" viewBox="0 0 48 48" aria-hidden="true">
-                <circle cx="24" cy="24" r="18" className="theme-card__arc" />
+                {/* 一律画 60% 的进度弧：三张卡比的是"风格"，不是"画法" */}
+                <circle
+                  cx="24"
+                  cy="24"
+                  r="18"
+                  className="theme-card__arc"
+                  strokeDasharray="113.1"
+                  strokeDashoffset="45.2"
+                />
               </svg>
               <span className="theme-card__time">25:00</span>
             </span>

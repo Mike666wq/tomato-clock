@@ -204,13 +204,18 @@ export function Stats(): React.JSX.Element {
           <div className="stats__cap">今日番茄</div>
         </div>
         <div>
-          <div className="stats__num">{minutes(data.todayFocusSec)}</div>
-          <div className="stats__cap">今日专注（分钟）</div>
+          <div className="stats__num">
+            {minutes(data.todayFocusSec)}
+            <span className="stats__unit">分钟</span>
+          </div>
+          <div className="stats__cap">今日专注</div>
         </div>
         <div>
-          <div className="stats__num">{minutes(data.totalFocusSec)}</div>
-          <div className="stats__cap">累计专注（分钟）</div>
-          <div className="stats__sub">含历史</div>
+          <div className="stats__num">
+            {minutes(data.totalFocusSec)}
+            <span className="stats__unit">分钟</span>
+          </div>
+          <div className="stats__cap">累计专注</div>
         </div>
       </div>
 
@@ -226,6 +231,17 @@ export function Stats(): React.JSX.Element {
       <section className="card">
         <h3 className="card__title">近 7 天趋势</h3>
         <TrendChart data={data.last7Days} />
+        {/* 灰柱是"往日"，红柱是"今天"——不写出来用户看不懂 */}
+        <div className="chart-legend">
+          <span className="chart-legend__item">
+            <i className="chart-legend__swatch chart-legend__swatch--today" />
+            今天
+          </span>
+          <span className="chart-legend__item">
+            <i className="chart-legend__swatch chart-legend__swatch--past" />
+            往日
+          </span>
+        </div>
       </section>
 
       <section className="card">

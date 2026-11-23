@@ -51,4 +51,133 @@
   --shadow-focus: 0 0 0 3px rgba(255, 90, 60, 0.28);
   /* 进度弧的双层发光（SVG 上用 filter） */
   --glow-arc: drop-shadow(0 0 8px rgba(255, 90, 60, 0.6)) drop-shadow(0 0 24px rgba(255, 90, 60, 0.4));
+
+  /* ---------- 灵动岛：霓虹下是发光的玻璃胶囊 ---------- */
+  --island-bg: rgba(26, 16, 18, 0.92);
+  --island-shade: linear-gradient(to bottom, rgba(255, 90, 60, 0.07), rgba(0, 0, 0, 0.35));
+  --island-edge: color-mix(in srgb, var(--phase) 18%, transparent);
+  --island-shadow: 0 8px 22px rgba(255, 90, 60, 0.12);
+  --island-hairline: rgba(255, 150, 120, 0.22);
+  --island-bottom-edge: rgba(0, 0, 0, 0.4);
+  --island-inner: rgba(255, 90, 60, 0.12);
+  --island-radius: 17px;
+  --island-radius-expanded: 20px;
+  --island-track: color-mix(in srgb, var(--ink) 14%, transparent);
+}
+
+/* ================= 结构覆盖：霓虹的形态 ================= */
+
+/* 阶段标签：一个发光的小点 + 拉开字距的文字 */
+:root[data-theme='neon'] .phase-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  letter-spacing: 0.3em;
+  text-indent: 0.3em;
+  color: var(--ink-2);
+}
+
+:root[data-theme='neon'] .phase-label::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--phase);
+  box-shadow: 0 0 10px var(--phase), 0 0 22px var(--phase);
+}
+
+/* 主按钮：发光圆键 */
+:root[data-theme='neon'] .btn--primary {
+  width: 76px;
+  height: 76px;
+  min-width: 76px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--phase);
+  color: #ffffff;
+  box-shadow: var(--shadow-btn), inset 0 0 20px rgba(255, 255, 255, 0.18);
+}
+
+:root[data-theme='neon'] .btn--primary .btn__label {
+  display: none;
+}
+
+:root[data-theme='neon'] .btn--primary .btn__icon svg {
+  width: 30px;
+  height: 30px;
+}
+
+/* 次要按钮：纯图标，不画框 */
+:root[data-theme='neon'] .btn--ghost {
+  width: 46px;
+  height: 46px;
+  min-width: 46px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--ink-2);
+}
+
+:root[data-theme='neon'] .btn--ghost .btn__label {
+  display: none;
+}
+
+:root[data-theme='neon'] .btn--ghost:hover {
+  color: var(--ink);
+  background: none;
+  border-color: transparent;
+}
+
+:root[data-theme='neon'] .controls {
+  gap: 42px;
+}
+
+/* 模板 / 主题：玻璃小片，选中的那一片带一圈光 */
+:root[data-theme='neon'] .presets__chip,
+:root[data-theme='neon'] .topics__chip {
+  height: 26px;
+  padding: 0 12px;
+  border-radius: 13px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--ink-2);
+}
+
+:root[data-theme='neon'] .presets__chip--on,
+:root[data-theme='neon'] .topics__chip--on {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--phase) 10%, transparent);
+  border-color: color-mix(in srgb, var(--phase) 55%, transparent);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--phase) 22%, transparent);
+}
+
+/* 时长不在界面上写：切模板时你看的是"哪个"，不是"多少分钟" */
+:root[data-theme='neon'] .presets__chip > em {
+  display: none;
+}
+
+/* 底部导航：一条浮起来的玻璃条 */
+:root[data-theme='neon'] .nav {
+  margin: 0 18px 14px;
+  height: 50px;
+  border-top: none;
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+:root[data-theme='neon'] .nav__item--on {
+  color: var(--phase);
+  text-shadow: 0 0 14px color-mix(in srgb, var(--phase) 50%, transparent);
+}
+
+/* 状态行：小字、字距拉开 */
+:root[data-theme='neon'] .status {
+  font-size: var(--fs-tiny);
+  letter-spacing: 0.16em;
+}
+
+/* 标题栏：字距拉开，像仪表上的标签 */
+:root[data-theme='neon'] .titlebar__title {
+  letter-spacing: 0.3em;
 }

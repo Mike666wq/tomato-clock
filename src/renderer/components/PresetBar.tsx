@@ -21,6 +21,12 @@ export function PresetBar({ presets, activeId, running, onPick }: Props): React.
   const sorted = [...presets].sort((a, b) => a.order - b.order)
   const scrollRef = useRef<HTMLDivElement>(null)
   const [overflow, setOverflow] = useState(false)
+  // 当前选中项的位置和总数：系统感那套分段控件的滑块靠这两个变量定位，
+  // 组件里不做"如果是系统感就…"的判断
+  const activeIndex = Math.max(
+    0,
+    sorted.findIndex((p) => p.id === activeId)
+  )
 
   // 装不下时右边加一段渐隐，暗示"还能往右滑"
   useEffect(() => {
@@ -40,7 +46,15 @@ export function PresetBar({ presets, activeId, running, onPick }: Props): React.
         className={overflow ? 'presets__scroll presets__scroll--more' : 'presets__scroll'}
         ref={scrollRef}
       >
-        <div className="presets__inner">
+        <div
+          className="presets__inner"
+          style={
+            {
+              '--seg-index': activeIndex,
+              '--seg-count': sorted.length
+            } as React.CSSProperties
+          }
+        >
           {sorted.map((p) => (
             <button
               key={p.id}

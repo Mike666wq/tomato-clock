@@ -64,6 +64,20 @@
   --shadow-btn: none;
   --shadow-focus: none;
   --glow-arc: none;
+
+  /* ---------- 灵动岛：纸感下是一条浅纸色胶囊 ----------
+     只换颜色和圆角，结构不动。纸没有玻璃，所以噪点关掉、阴影很轻。 */
+  --island-bg: rgba(246, 243, 236, 0.97);
+  --island-shade: linear-gradient(to bottom, rgba(255, 255, 255, 0.5), rgba(0, 0, 0, 0.04));
+  --island-edge: color-mix(in srgb, var(--ink) 12%, transparent);
+  --island-shadow: 0 8px 24px rgba(60, 52, 35, 0.16);
+  --island-hairline: rgba(255, 255, 255, 0.7);
+  --island-bottom-edge: rgba(0, 0, 0, 0.06);
+  --island-inner: rgba(255, 255, 255, 0.55);
+  --island-noise: none;
+  --island-radius: 14px;
+  --island-radius-expanded: 16px;
+  --island-track: color-mix(in srgb, var(--ink) 12%, transparent);
 }
 
 /* 卡片标题（12px）在浅底上偏淡，提一档 */
@@ -170,6 +184,15 @@
 
 :root[data-theme='paper'] .timer__bottom .status {
   padding-top: 8px;
+}
+
+/* 纸感的按钮是文字：图标不出现 */
+:root[data-theme='paper'] .btn__icon {
+  display: none;
+}
+
+:root[data-theme='paper'] .controls {
+  gap: 46px;
 }
 
 /* 阶段标签：纸感不靠颜色强调，靠字距 */

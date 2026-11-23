@@ -46,6 +46,19 @@
   --shadow-btn: none;
   --shadow-focus: 0 0 0 3px rgba(255, 59, 48, 0.28);
   --glow-arc: none;
+
+  /* ---------- 灵动岛：深色下跟卡片一个颜色 ---------- */
+  --island-bg: rgba(28, 28, 30, 0.94);
+  --island-shade: linear-gradient(to bottom, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.18));
+  --island-edge: rgba(255, 255, 255, 0.1);
+  --island-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --island-hairline: rgba(255, 255, 255, 0.12);
+  --island-bottom-edge: rgba(0, 0, 0, 0.2);
+  --island-inner: rgba(255, 255, 255, 0.06);
+  --island-noise: none;
+  --island-radius: 22px;
+  --island-radius-expanded: 22px;
+  --island-track: color-mix(in srgb, var(--ink) 16%, transparent);
 }
 
 :root[data-theme='ios'][data-mode='light'],
@@ -66,4 +79,155 @@
   --hover: rgba(120, 120, 128, 0.12);
   --active: rgba(120, 120, 128, 0.2);
   --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.08);
+
+  /* ---------- 灵动岛：浅色下跟卡片一样是白的 ---------- */
+  --island-bg: rgba(255, 255, 255, 0.94);
+  --island-shade: linear-gradient(to bottom, rgba(255, 255, 255, 0.5), rgba(0, 0, 0, 0.04));
+  --island-edge: rgba(0, 0, 0, 0.08);
+  --island-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+  --island-hairline: rgba(255, 255, 255, 0.8);
+  --island-bottom-edge: rgba(0, 0, 0, 0.05);
+  --island-inner: rgba(255, 255, 255, 0.5);
+  --island-noise: none;
+  --island-radius: 22px;
+  --island-radius-expanded: 22px;
+  --island-track: color-mix(in srgb, var(--ink) 16%, transparent);
+}
+
+/* ================= 结构覆盖：系统感的形态 ================= */
+
+/* 阶段标签：靠左，跟下面的行对齐 */
+:root[data-theme='ios'] .phase-label {
+  align-self: flex-start;
+  margin: 6px 0 10px;
+}
+
+/* 主按钮：药丸（带文字，不带图标） */
+:root[data-theme='ios'] .btn--primary {
+  width: 132px;
+  height: 56px;
+  min-width: 132px;
+  padding: 0 20px;
+  border-radius: 28px;
+  background: var(--phase);
+  color: #ffffff;
+  font-size: 17px;
+  font-weight: 600;
+  gap: 6px;
+}
+
+:root[data-theme='ios'] .btn--primary .btn__icon {
+  display: none;
+}
+
+/* 次要按钮：圆形图标键 */
+:root[data-theme='ios'] .btn--ghost {
+  width: 56px;
+  height: 56px;
+  min-width: 56px;
+  padding: 0;
+  border-radius: 50%;
+  border: none;
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+:root[data-theme='ios'] .btn--ghost .btn__label {
+  display: none;
+}
+
+:root[data-theme='ios'] .btn--ghost:hover {
+  background: var(--active);
+  border-color: transparent;
+}
+
+:root[data-theme='ios'] .controls {
+  gap: 14px;
+}
+
+/* 模板选择：分段控件（灰槽 + 滑块）。
+   滑块的位置由组件给的 --seg-index / --seg-count 决定，
+   组件里没有"如果是系统感就…"这种判断。 */
+:root[data-theme='ios'] .presets__inner {
+  position: relative;
+  width: 100%;
+  gap: 0;
+  padding: 2px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+:root[data-theme='ios'] .presets__inner::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 2px;
+  width: calc((100% - 4px) / var(--seg-count, 1));
+  transform: translateX(calc(var(--seg-index, 0) * 100%));
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.14);
+}
+
+:root[data-theme='ios'] .presets__chip {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  height: 30px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 10px;
+  background: none;
+  color: var(--ink-2);
+}
+
+:root[data-theme='ios'] .presets__chip--on {
+  color: var(--ink);
+  font-weight: 600;
+  background: none;
+  border-color: transparent;
+}
+
+:root[data-theme='ios'] .presets__chip > em {
+  display: none;
+}
+
+/* 主题：药丸标签 */
+:root[data-theme='ios'] .topics__chip {
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 16px;
+  border: none;
+  background: var(--surface-2);
+  color: var(--ink-2);
+}
+
+:root[data-theme='ios'] .topics__chip--on {
+  background: var(--phase);
+  color: #ffffff;
+  border-color: transparent;
+}
+
+/* 卡片：大圆角 + 柔和阴影 */
+:root[data-theme='ios'] .card {
+  border-radius: 22px;
+  box-shadow: var(--shadow-card);
+}
+
+/* 底部导航：标签栏 */
+:root[data-theme='ios'] .nav {
+  margin: 0 12px 12px;
+  height: 54px;
+  border-top: none;
+  border-radius: 22px;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  gap: 0;
+  justify-content: space-around;
+}
+
+:root[data-theme='ios'] .nav__item {
+  flex: 1;
+  text-align: center;
 }

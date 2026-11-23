@@ -255,6 +255,17 @@ button {
   background: var(--hover);
 }
 
+/* 按钮里同时放图标和文字，主题挑显示哪个（组件里不许为某个主题写 if） */
+.btn__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn__label {
+  display: inline-block;
+}
+
 /* ---------- 底部导航 ---------- */
 
 .nav {
@@ -339,10 +350,20 @@ button {
 .stats__num {
   font-family: var(--font-num);
   font-size: 26px;
-  font-weight: 300;
+  font-weight: var(--font-num-weight, 300);
   line-height: 1.1;
   font-variant-numeric: tabular-nums;
   color: var(--ink);
+}
+
+/* 单位跟在数字后面当小上标：
+   原来"累计专注（分钟）"既换行又多一行"含历史"，把三张卡撑得不一样高 */
+.stats__unit {
+  margin-left: 3px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--ink-2);
+  vertical-align: super;
 }
 
 .stats__cap {
@@ -417,6 +438,35 @@ button {
 
 .chart__label--left {
   text-anchor: start;
+}
+
+/* 图例：极小的一行，解释灰柱和红柱分别是什么 */
+.chart-legend {
+  display: flex;
+  gap: 14px;
+  margin-top: 8px;
+  font-size: var(--fs-tiny);
+  color: var(--ink-3);
+}
+
+.chart-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.chart-legend__swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.chart-legend__swatch--today {
+  background: var(--accent);
+}
+
+.chart-legend__swatch--past {
+  background: color-mix(in srgb, var(--ink-2) 42%, transparent);
 }
 
 .chart__value {
@@ -573,10 +623,9 @@ button {
   background: var(--hover);
 }
 
-/* 当前选中的加边框 */
+/* 当前选中的加边框。只加边框：不给底色，否则三张卡看起来结构不一样 */
 .theme-card--on {
   border-color: var(--phase);
-  background: var(--phase-faint);
 }
 
 /* 缩略预览：借用各套主题自己的变量（[data-theme='paper'] 这类选择器），
@@ -606,6 +655,7 @@ button {
   fill: none;
   stroke: var(--phase);
   stroke-width: var(--ring-stroke);
+  stroke-linecap: round;
   /* 霓虹那套的发光也照搬过来 */
   filter: var(--glow-arc, none);
 }

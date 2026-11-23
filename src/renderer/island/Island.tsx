@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { MediaSnapshot, Settings, TimerState } from '../../shared/types'
+import { resolveUiTheme } from '../../shared/types'
 import { NextIcon, OpenIcon, PauseIcon, PlayIcon, PrevIcon, SkipIcon } from './Icons'
 
 /** 悬停多久展开 */
@@ -73,6 +74,24 @@ export default function Island(): React.JSX.Element {
     el.dataset.phase = state.phase
     el.dataset.paused = state.running ? '0' : '1'
   }, [state])
+
+  /**
+   * 灵动岛跟随主窗口的主题。
+   *
+   * 只换**颜色和圆角**，结构不动（还是那条胶囊）。
+   * 每套主题在 styles/themes/*.css 里定义自己的一套 --island-* 变量，
+   * 这里只负责把 data-theme / data-mode 写到 html 上。
+   */
+  useEffect(() => {
+    const el = document.documentElement
+    const r = resolveUiTheme(
+      settings?.uiTheme ?? 'paper',
+      settings?.uiMode ?? 'system',
+      window.matchMedia('(prefers-color-scheme: dark)').matches
+    )
+    el.dataset.theme = r.theme
+    el.dataset.mode = r.mode
+  }, [settings?.uiTheme, settings?.uiMode])
 
   /** 收起 / 展开：本地状态决定画什么，主进程据此改窗口大小 */
   const setMode = useCallback((next: boolean) => {
