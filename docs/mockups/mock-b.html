@@ -15,25 +15,10 @@
     <meta charset="utf-8" />
     <title>v0.5 B 版静态稿</title>
     <link rel="stylesheet" href="../../src/renderer/styles/tokens.css" />
+    <!-- 稿子专用补充 token（浅色底 + --ink-3）：两个稿子共用这一份，
+         真要采纳就并进 tokens.css 并删掉这个文件 -->
+    <link rel="stylesheet" href="mock-tokens.css" />
     <style>
-      /* ---- 稿子本地补的 token（真要采纳就并进 tokens.css）---- */
-      :root {
-        --ink-3: color-mix(in srgb, var(--ink-2) 62%, transparent);
-      }
-      html[data-theme='light'] {
-        --bg: #f4f5f7;
-        --surface: #ffffff;
-        --surface-2: #eceef1;
-        --line: #d8dce2;
-        --ink: #16181c;
-        --ink-2: #5b626d;
-        --ink-3: color-mix(in srgb, var(--ink-2) 66%, transparent);
-        --accent: #e8563f;
-        --break: #3f9c78;
-        --track: rgba(20, 22, 26, 0.1);
-        --on-phase: #ffffff;
-      }
-
       * {
         box-sizing: border-box;
       }
@@ -102,30 +87,35 @@
       .ring-area {
         flex: 1 1 auto;
         min-height: 0;
-        display: grid;
-        place-items: center;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 8px 0;
       }
-      /* 环直径按可用空间算：min(宽-112, 高×0.52)，夹在 240–360。
-         这样 420×560 的最小窗口也塞得下，不会压叠。 */
+      /* 环不再写死：高度 = min(可用高度, 322)，宽度由 aspect-ratio 推出。
+         窗口再矮环会自己变小，不会溢出被裁成平底。 */
       .ring {
         position: relative;
-        width: var(--ring);
-        height: var(--ring);
+        height: min(100%, var(--ring));
+        width: auto;
+        aspect-ratio: 1;
+        max-width: 100%;
       }
-      /* 环后的极淡径向光晕，跟阶段换色 */
+      /* 环后的极淡径向光晕，跟阶段换色。
+         收到 6% 并收得更紧：光晕是氛围，不是雾，糊了就没质感了。 */
       .ring::before {
         content: '';
         position: absolute;
-        inset: -16%;
+        inset: -12%;
         border-radius: 50%;
         background: radial-gradient(
           circle,
-          color-mix(in srgb, var(--phase) 9%, transparent) 0%,
-          transparent 62%
+          color-mix(in srgb, var(--phase) 6%, transparent) 0%,
+          transparent 58%
         );
         pointer-events: none;
       }
-      /* 环内侧的一圈柔光 */
+      /* 环内侧的一圈柔光：8%，贴住边缘，不往中间糊 */
       .ring::after {
         content: '';
         position: absolute;
@@ -133,9 +123,9 @@
         border-radius: 50%;
         background: radial-gradient(
           circle,
-          transparent 62%,
-          color-mix(in srgb, var(--phase) 8%, transparent) 80%,
-          transparent 94%
+          transparent 76%,
+          color-mix(in srgb, var(--phase) 8%, transparent) 88%,
+          transparent 97%
         );
         pointer-events: none;
       }
@@ -168,6 +158,8 @@
         justify-content: center;
       }
       .time {
+        display: inline-flex;
+        align-items: baseline;
         font-family: var(--font-num);
         font-size: 112px;
         font-weight: 200;
@@ -175,6 +167,10 @@
         letter-spacing: -0.04em;
         font-variant-numeric: tabular-nums;
         color: var(--ink);
+      }
+      /* 冒号两侧被 tabular-nums 撑开的字宽收回来 */
+      .time__sep {
+        margin: 0 -0.035em;
       }
       .task {
         margin-top: 12px;
@@ -411,14 +407,14 @@
             <defs>
               <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
                 <stop offset="0%" stop-color="var(--phase)" />
-                <stop offset="100%" stop-color="color-mix(in srgb, var(--phase) 55%, white)" />
+                <stop offset="100%" stop-color="color-mix(in srgb, var(--phase) 85%, white)" />
               </linearGradient>
             </defs>
             <circle class="ring__track" cx="161" cy="161" r="155" />
             <circle class="ring__arc" cx="161" cy="161" r="155" />
           </svg>
           <div class="ring__center">
-            <span class="time">18:42</span>
+            <span class="time"><span>18</span><span class="time__sep">:</span><span>42</span></span>
             <span class="task">写方案</span>
           </div>
         </div>
@@ -443,10 +439,10 @@
       <div class="chips">
         <div class="chips__row">
           <span class="chips__label">模板</span>
-          <span class="chip chip--on">经典 · 25/5</span>
-          <span class="chip">深度 · 50/10</span>
-          <span class="chip">冲刺 · 15/3</span>
-          <span class="chip">考试 · 45/10</span>
+          <span class="chip chip--on">经典</span>
+          <span class="chip">深度</span>
+          <span class="chip">冲刺</span>
+          <span class="chip">考试</span>
         </div>
         <div class="chips__row">
           <span class="chips__label">主题</span>

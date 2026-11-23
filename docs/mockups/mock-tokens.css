@@ -1,0 +1,28 @@
+/*
+ * mock-tokens.css —— 静态稿专用的补充 token（浅色底 + --ink-3）。
+ *
+ * 为什么单独一个文件：src/renderer/styles/tokens.css 现在只有深色一套，
+ * 浅色调色板和 --ink-3 还没并进去。真要采纳这一版，第一件事就是把它们
+ * 并进 tokens.css，然后删掉本文件——稿子里留一份、代码里留一份是最容易
+ * 出错的写法，所以两个稿子共用这一份，不各抄一遍。
+ *
+ * 颜色规则不变：派生色一律 color-mix，不引入新色相。
+ */
+
+:root {
+  --ink-3: color-mix(in srgb, var(--ink-2) 62%, transparent);
+}
+
+html[data-theme='light'] {
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --surface-2: #eceef1;
+  --line: #d8dce2;
+  --ink: #16181c;
+  --ink-2: #5b626d;
+  --ink-3: color-mix(in srgb, var(--ink-2) 66%, transparent);
+  --accent: #e8563f;
+  --break: #3f9c78;
+  --track: rgba(20, 22, 26, 0.1);
+  --on-phase: #ffffff;
+}

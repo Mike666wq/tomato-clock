@@ -15,25 +15,10 @@
     <meta charset="utf-8" />
     <title>v0.5 A 版静态稿</title>
     <link rel="stylesheet" href="../../src/renderer/styles/tokens.css" />
+    <!-- 稿子专用补充 token（浅色底 + --ink-3）：两个稿子共用这一份，
+         真要采纳就并进 tokens.css 并删掉这个文件 -->
+    <link rel="stylesheet" href="mock-tokens.css" />
     <style>
-      /* ---- 稿子本地补的 token（真要采纳就并进 tokens.css）---- */
-      :root {
-        --ink-3: color-mix(in srgb, var(--ink-2) 62%, transparent);
-      }
-      html[data-theme='light'] {
-        --bg: #f4f5f7;
-        --surface: #ffffff;
-        --surface-2: #eceef1;
-        --line: #d8dce2;
-        --ink: #16181c;
-        --ink-2: #5b626d;
-        --ink-3: color-mix(in srgb, var(--ink-2) 66%, transparent);
-        --accent: #e8563f;
-        --break: #3f9c78;
-        --track: rgba(20, 22, 26, 0.1);
-        --on-phase: #ffffff;
-      }
-
       * {
         box-sizing: border-box;
       }
@@ -53,7 +38,7 @@
 
       /* 画板：480×620 的应用窗口 */
       .frame {
-        --ring: 322px;
+        --ring: 322px; /* 环的最大直径，实际随可用高度缩 */
         width: 480px;
         height: 620px;
         display: flex;
@@ -70,6 +55,10 @@
         --ring: min(308px, 291px);
         width: 420px;
         height: 560px;
+      }
+      /* 窗口矮了，上下留白跟着收，环才有地方放 */
+      .frame[data-size='small'] .ring-area {
+        padding: 34px 0 18px;
       }
 
       /* ---- 顶栏 ---- */
@@ -97,16 +86,28 @@
       }
 
       /* ---- 圆环 ---- */
+      /* 垂直节奏（480×620 实测，单位 px）：
+         顶栏 34 → 环上 52 → 环 322 → 环下到按钮 24 → 按钮 72
+         → 按钮到状态行 18 → 状态行 17 → 状态行到导航 24 → 导航 56
+         上下留白对称，重心落在窗口中线略偏上（下面有状态行和导航压着） */
       .ring-area {
         flex: 1 1 auto;
         min-height: 0;
-        display: grid;
-        place-items: center;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 52px 0 24px;
       }
+      /* 环不再是写死的 322：高度 = min(可用高度, 322)，宽度由 aspect-ratio 推出，
+         所以环永远是方的、永远塞得下。窗口再矮它会自己变小，不会被裁成平底。
+         （写成 height: min(100%, 322px) 但外层是 grid 的话是坑：
+           grid 行高不确定，百分比解析不了，会退回 SVG 的默认 300×150） */
       .ring {
         position: relative;
-        width: var(--ring);
-        height: var(--ring);
+        height: min(100%, var(--ring));
+        width: auto;
+        aspect-ratio: 1;
+        max-width: 100%;
       }
       .ring svg {
         width: 100%;
@@ -136,6 +137,8 @@
         justify-content: center;
       }
       .time {
+        display: inline-flex;
+        align-items: baseline;
         font-family: var(--font-num);
         font-size: 96px;
         font-weight: 200;
@@ -143,6 +146,12 @@
         letter-spacing: -0.03em;
         font-variant-numeric: tabular-nums;
         color: var(--ink);
+      }
+      /* 冒号两侧被 tabular-nums 撑开的字宽收回来：
+         实测数字间距 8.6px，冒号左边 8.7、右边 5.3，
+         不收的话读起来像「18: 42」。 */
+      .time__sep {
+        margin: 0 -0.035em;
       }
       .task {
         margin-top: 10px;
@@ -157,7 +166,7 @@
         justify-content: center;
         gap: 40px;
         flex: none;
-        padding-bottom: 4px;
+        margin-bottom: 18px; /* 按钮到状态行 18px */
       }
       .btn {
         width: 40px;
@@ -183,7 +192,7 @@
         text-align: center;
         font-size: 12px;
         color: var(--ink-3);
-        padding: 22px 0 18px;
+        padding: 0 0 24px; /* 状态行离导航 24px，不再贴着分隔线 */
       }
 
       /* ---- 导航 ---- */
@@ -338,7 +347,7 @@
             <circle class="ring__arc" cx="161" cy="161" r="153" />
           </svg>
           <div class="ring__center">
-            <span class="time">18:42</span>
+            <span class="time"><span>18</span><span class="time__sep">:</span><span>42</span></span>
             <span class="task">写方案</span>
           </div>
         </div>
