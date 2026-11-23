@@ -209,6 +209,30 @@ export type TopicStat = {
   share: number
 }
 
+/** 今日时间线上的一段（v0.3.4 的甘特条） */
+export type TimelineEntry = {
+  /** 段的开始时间（ISO） */
+  startedAt: string
+  /** 段的结束时间（ISO） */
+  endedAt: string
+  /** 专注 / 短休 / 长休 */
+  kind: PhaseKind
+  /** 实际时长（秒）。宽度按**实际时长**画，不是计划时长 */
+  actualSec: number
+  /** 是否自然走完。没走完的（跳过/中断）用虚线区分 */
+  completed: boolean
+  /** 主题 id，没挂主题为空 */
+  topicId: string | null
+  /** 主题名（记录当时的名字） */
+  topicName: string
+  /** 主题色。没挂主题时为空 —— 界面用中性色，不给它编个假颜色 */
+  color: string | null
+  /** 任务名 */
+  task: string
+  /** 打断原因 */
+  interrupt: InterruptKind
+}
+
 /** 统计页需要的数据，由主进程算好 */
 export type StatsData = {
   /** 今日完成的番茄数 */
@@ -219,6 +243,8 @@ export type StatsData = {
   totalFocusSec: number
   /** 今日按小时分布，24 个槽位，单位分钟 */
   todayByHour: number[]
+  /** 今日时间线：专注段和休息段都画，按开始时间排 */
+  timeline: TimelineEntry[]
   /** 近 7 天（含今天），索引 0 = 6 天前 */
   last7Days: Array<{ date: string; label: string; focusSec: number }>
   /** 打断原因排行 */

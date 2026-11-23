@@ -2,7 +2,7 @@
 //
 // 放在主进程算，界面只负责画——日期口径只有一处，不会两边算出两个"今天"。
 
-import type { InterruptKind, Session, StatsData, TopicStat } from '../shared/types'
+import type { InterruptKind, Session, StatsData, TimelineEntry, TopicStat } from '../shared/types'
 import type { Topic } from '../shared/topics'
 import { UNTITLED } from '../shared/topics'
 import { localDateKey, sessionDayKey } from '../shared/day'
@@ -84,6 +84,45 @@ function toStats(buckets: Map<string | null, Bucket>, topics: Topic[]): TopicSta
   const total = list.reduce((sum, x) => sum + x.totalSec, 0)
   for (const x of list) x.share = total > 0 ? x.totalSec / total : 0
   list.sort((a, b) => b.totalSec - a.totalSec)
+  return list
+}
+
+/**
+ * 今日时间线：把今天的每一段（专注 + 休息）按开始时间排好，给界面画甘特条。
+ *
+ * 三条口径，都跟"今日概览"那边保持一致：
+ *   - **按开始时间归当天**（规格第四节）。跨零点的段算开始那天。
+ *   - **宽度用实际时长**（actualSec），不是计划时长 —— 计划 25 分钟实际跑了 8 分钟，
+ *     那条块就只画 8 分钟的宽度，不然图会骗人。
+ *   - **没挂主题的段不给假颜色**：color 留空，界面用中性色画。
+ *
+ * 休息段也画（只是压暗），因为"专注—休息—专注"的节奏正是这张图的价值。
+ */
+function buildTimeline(sessions: Session[], topics: Topic[], todayKey: string): TimelineEntry[] {
+  const list: TimelineEntry[] = []
+  for (const s of sessions) {
+    if (sessionDayKey(s.startedAt) !== todayKey) continue
+    // **休息段不挂主题**（规格：休息段没有"做什么"，挂主题没意义）。
+    // 所以休息段的 topicId / color 一律是空 —— 界面上它靠压暗区分，
+    // 不该偷用专注段的主题色。
+    const isFocus = s.kind === 'focus'
+    const topic = isFocus && s.topicId ? topics.find((t) => t.id === s.topicId) : undefined
+    list.push({
+      startedAt: s.startedAt,
+      endedAt: s.endedAt,
+      kind: s.kind,
+      actualSec: s.actualSec ?? 0,
+      completed: s.completed,
+      topicId: isFocus ? (s.topicId ?? null) : null,
+      topicName: topic?.name ?? s.topicNameSnapshot ?? (isFocus ? UNTITLED : ''),
+      // 没挂主题 → 空字符串，界面自己决定用什么中性色
+      color: topic?.color ?? '',
+      task: s.task ?? '',
+      interrupt: s.interrupt
+    })
+  }
+  // 按开始时间排：画的时候一条泳道，顺序错了就看不出节奏
+  list.sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime())
   return list
 }
 
@@ -170,6 +209,7 @@ export function buildStats(sessions: Session[], topics: Topic[] = []): StatsData
     todayFocusSec,
     totalFocusSec,
     todayByHour,
+    timeline: buildTimeline(sessions, topics, todayKey),
     last7Days,
     interrupts: (['none', 'internal', 'external'] as InterruptKind[]).map((kind) => ({
       kind,

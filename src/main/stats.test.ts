@@ -133,3 +133,72 @@ describe('F 统计口径', () => {
     expect(stat?.rounds).toBe(1)
   })
 })
+
+// ---------- 今日时间线（v0.3.4 甘特条） ----------
+
+describe('G 今日时间线', () => {
+  it('G1 专注段和休息段都进时间线', () => {
+    const stats = buildStats(
+      [session({ kind: 'focus', actualSec: 1500 }), session({ kind: 'short', actualSec: 300 })],
+      TOPICS
+    )
+    expect(stats.timeline.length).toBe(2)
+    expect(stats.timeline.map((e) => e.kind)).toEqual(['focus', 'short'])
+  })
+
+  it('G2 宽度用实际时长，不是计划时长', () => {
+    // 计划 25 分钟，实际只跑了 5 分钟
+    const stats = buildStats([session({ plannedSec: 1500, actualSec: 300 })], TOPICS)
+    expect(stats.timeline[0].actualSec).toBe(300)
+  })
+
+  it('G3 没挂主题的段不给假颜色（color 留空）', () => {
+    const stats = buildStats([session({ topicId: undefined })], TOPICS)
+    expect(stats.timeline[0].color).toBe('')
+    expect(stats.timeline[0].topicId).toBeNull()
+  })
+
+  it('G4 挂了主题的段带上主题色', () => {
+    const stats = buildStats([session({ topicId: 't2' })], TOPICS)
+    expect(stats.timeline[0].color).toBe('#5ac49b')
+    expect(stats.timeline[0].topicName).toBe('读论文')
+  })
+
+  it('G5 跨零点的段按开始时间归当天', () => {
+    const start = new Date()
+    start.setHours(23, 30, 0, 0)
+    const s = session({ startedAt: start.toISOString(), actualSec: 1500 })
+    const stats = buildStats([s], TOPICS)
+    expect(stats.timeline.length).toBe(1)
+    expect(stats.timeline[0].startedAt).toBe(start.toISOString())
+  })
+
+  it('G6 昨天的段不进今天的时间线', () => {
+    const start = new Date()
+    start.setDate(start.getDate() - 1)
+    start.setHours(10, 0, 0, 0)
+    const stats = buildStats([session({ startedAt: start.toISOString() })], TOPICS)
+    expect(stats.timeline.length).toBe(0)
+  })
+
+  it('G7 没跑完的段 completed=false（界面据此画虚线）', () => {
+    const stats = buildStats([session({ completed: false, actualSec: 100 })], TOPICS)
+    expect(stats.timeline[0].completed).toBe(false)
+  })
+
+  it('G8 时间线按开始时间排好序', () => {
+    const mk = (h: number, m: number): Session => {
+      const d = new Date()
+      d.setHours(h, m, 0, 0)
+      return session({ startedAt: d.toISOString(), id: `s${h}${m}` })
+    }
+    const stats = buildStats([mk(15, 0), mk(9, 30), mk(12, 15)], TOPICS)
+    const hours = stats.timeline.map((e) => new Date(e.startedAt).getHours())
+    expect(hours).toEqual([9, 12, 15])
+  })
+
+  it('G9 休息段不挂主题（color 也是空的）', () => {
+    const stats = buildStats([session({ kind: 'short', actualSec: 300 })], TOPICS)
+    expect(stats.timeline[0].color).toBe('')
+  })
+})

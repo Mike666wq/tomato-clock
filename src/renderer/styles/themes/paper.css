@@ -124,6 +124,19 @@
   background: color-mix(in srgb, var(--topic-color) 30%, var(--ink));
 }
 
+/* 今日时间线的色块：**不能用横条那套混法**。
+   量过：30% 混墨色之后，蓝色块 rgb(53,65,85) 和绿色块 rgb(43,75,57)
+   互相之间只有 **1.07:1** 对比度 —— 两个主题的块看起来一模一样，
+   那就白画了（横条是长条，靠位置和标签认；色块是并排的，必须靠颜色认）。
+
+   所以色块用 **60% 主题色**：
+   - 蓝绿之间的对比度回到能分辨的水平
+   - 对纸底仍然够暗（不会跳出来）
+   实测见 docs/v0.6.4-今日时间线.md */
+:root[data-theme='paper'] .timeline__seg {
+  fill: color-mix(in srgb, var(--topic-color) 60%, var(--ink));
+}
+
 /* 数字卡的次要说明（"含历史"） */
 :root[data-theme='paper'] .stats__sub {
   color: var(--ink-2-strong);

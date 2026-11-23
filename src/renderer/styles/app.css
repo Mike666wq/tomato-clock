@@ -510,6 +510,64 @@ button {
   font-family: var(--font-num);
 }
 
+/* ---------- 今日时间线（甘特条，v0.3.4） ---------- */
+
+/* 泳道底：一条极浅的槽，让块有"落在一条时间轴上"的感觉 */
+.timeline__lane {
+  fill: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+
+/* 色块：颜色来自该段的主题色（--topic-color 由组件注入）。
+   没挂主题的段组件注入的是 var(--ink-3)，不给它编个假颜色。 */
+.timeline__seg {
+  fill: var(--topic-color);
+}
+
+/* 没完成的段（跳过/中断）：虚线描边。
+   口径跟完成率一致 —— "跑完了"和"没跑完"是同一件事的两种状态。 */
+.timeline__seg--open {
+  stroke: var(--ink-2);
+  stroke-width: 1;
+  stroke-dasharray: 3 2;
+  fill-opacity: 0.45;
+}
+
+/* 休息段：压暗，但**不能淡到看不见** ——
+   这张图的全部价值就是"专注—休息—专注"的节奏，
+   休息段没了，节奏就断了。用极淡的墨色，不用主题色。 */
+.timeline__seg--break {
+  fill: color-mix(in srgb, var(--ink) 22%, transparent);
+}
+
+.timeline__seg--break.timeline__seg--open {
+  fill: color-mix(in srgb, var(--ink) 14%, transparent);
+}
+
+/* 块内的时长文字：写在块上，要能压住底色。
+   主题色块深浅不定，所以文字用"当前主题的底色"混出来：
+   纸感下底色是暖白 → 白字压在砖红上读得清；
+   霓虹/系统感下底色是近黑 → 黑字压在亮色块上读得清。 */
+.timeline__seg-text {
+  font-size: 9px;
+  fill: color-mix(in srgb, var(--bg) 88%, transparent);
+  font-family: var(--font-num);
+  pointer-events: none;
+}
+
+/* 「现在」那条竖线 */
+.timeline__now {
+  stroke: var(--accent);
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+  opacity: 0.85;
+}
+
+.timeline__now-label {
+  font-size: 9px;
+  fill: var(--ink-2);
+  font-family: var(--font-ui);
+}
+
 /* ---------- 设置 ---------- */
 
 .field {

@@ -10,7 +10,7 @@
 //    以前"今日番茄"没有单位、另外两张把"分钟"塞在数字右边，三张长得不一样。
 
 import { useEffect, useState } from 'react'
-import type { StatsData, TopicStat } from '../../shared/types'
+import type { StatsData, TimelineEntry, TopicStat } from '../../shared/types'
 
 const W = 400
 const H = 116
@@ -19,8 +19,153 @@ const PLOT_H = H - 34
 /** x 轴基线 */
 const BASE_Y = H - 18
 
+/**
+ * 今日时间线（甘特条）的几何。
+ *
+ * **横轴算法跟"今日按小时分布"完全共用**（`slot = W / 24`，
+ * 刻度文字在 `h * slot + slot / 2`）。
+ * 这不是偷懒，是规格要求：两处各写一份算法，迟早会走偏
+ * （v0.6 的柱子对齐就是这么歪的）。
+ *
+ * 由此推出时间→坐标的映射：一个槽 = 一小时，
+ * 所以"当天第 m 分钟"落在 `m / 60 * slot`。
+ * 注意刻度 0/6/12/18 标的是**整点的中点**（跟上面那个图一样），
+ * 0 点那条线在 0.5 个槽处 —— 所以 00:34 的段落在它右边一点点。
+ */
+const TL = {
+  /** 泳道 */
+  laneY: 12,
+  laneH: 30,
+  /** x 轴基线 */
+  axisY: 46,
+  /** 刻度文字基线 */
+  labelY: 60,
+  /** 画布高 */
+  h: 66,
+  /** 块最小可见宽度（太短的段否则看不见） */
+  minW: 1.2,
+  /** 块内写时长所需的最小宽度 */
+  textW: 13,
+  /** 写"25 分"所需的最小宽度 */
+  textWFull: 26
+} as const
+
 function minutes(sec: number): number {
   return Math.round(sec / 60)
+}
+
+/** 当天第几分钟 → x 坐标（0 点在 0，24 点在最右） */
+function timeToX(minute: number, slot: number): number {
+  return (minute / 60) * slot
+}
+
+/**
+ * 今日时间线：一条泳道，今天每个段一个色块。
+ *
+ * 这张图相对柱状图的全部价值：**能看出"专注—休息—专注"的节奏**，
+ * 所以休息段也画（只是压暗），而不只是列专注段。
+ */
+function TimelineChart({ data }: { data: TimelineEntry[] }): React.JSX.Element {
+  const slot = W / 24
+  const now = new Date()
+  const nowMin = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60
+  const nowX = timeToX(nowMin, slot)
+
+  return (
+    <svg
+      className="chart chart--timeline"
+      viewBox={`0 0 ${W} ${TL.h}`}
+      role="img"
+      aria-label="今日时间线"
+    >
+      {/* 泳道底：一条浅槽，块画在它上面 */}
+      <rect x={0} y={TL.laneY} width={W} height={TL.laneH} className="timeline__lane" />
+
+      {data.map((e, i) => {
+        const start = new Date(e.startedAt)
+        const startMin = start.getHours() * 60 + start.getMinutes() + start.getSeconds() / 60
+        const durMin = e.actualSec / 60
+        // 跨零点的段：按开始时间归当天，但不许越过 24 点（裁到当天末尾）
+        const endMin = Math.min(24 * 60, startMin + durMin)
+        const x = timeToX(startMin, slot)
+        const w = Math.max(TL.minW, timeToX(endMin - startMin, slot))
+        const isBreak = e.kind !== 'focus'
+        const cls = [
+          'timeline__seg',
+          !e.color && !isBreak ? 'timeline__seg--none' : '',
+          isBreak ? 'timeline__seg--break' : '',
+          !e.completed ? 'timeline__seg--open' : ''
+        ]
+          .filter(Boolean)
+          .join(' ')
+        const label = `${fmtTime(e.startedAt)} – ${fmtTime(e.endedAt)}　${
+          e.topicName || '未挂主题'
+        }${e.task ? `　${e.task}` : ''}`
+        return (
+          <g key={`${e.startedAt}-${i}`}>
+            <title>{label}</title>
+            <rect
+              x={x}
+              y={TL.laneY}
+              width={w}
+              height={TL.laneH}
+              rx={2}
+              className={cls}
+              style={{ '--topic-color': e.color || 'var(--ink-3)' } as React.CSSProperties}
+            />
+            {/* 宽度够才写字：不够就省略，宁可少写也别糊成一团 */}
+            {w >= TL.textW ? (
+              <text
+                x={x + 3}
+                y={TL.laneY + TL.laneH / 2 + 3}
+                className="timeline__seg-text"
+              >
+                {w >= TL.textWFull ? `${minutes(e.actualSec)} 分` : minutes(e.actualSec)}
+              </text>
+            ) : null}
+          </g>
+        )
+      })}
+
+      {/* 「现在」：只有今天才有这条线 */}
+      {nowX >= 0 && nowX <= W ? (
+        <>
+          <line
+            x1={nowX}
+            y1={TL.laneY - 4}
+            x2={nowX}
+            y2={TL.axisY}
+            className="timeline__now"
+          />
+          <text
+            x={nowX > W - 26 ? nowX - 2 : nowX + 2}
+            y={TL.laneY - 5}
+            className="timeline__now-label"
+            textAnchor={nowX > W - 26 ? 'end' : 'start'}
+          >
+            现在
+          </text>
+        </>
+      ) : null}
+
+      <line x1={0} y1={TL.axisY} x2={W} y2={TL.axisY} className="chart__axis" />
+      {/* 刻度：跟"今日按小时分布"同一个算法 */}
+      {[0, 6, 12, 18].map((h) => (
+        <text key={h} x={h * slot + slot / 2} y={TL.labelY} className="chart__label" textAnchor="middle">
+          {h}
+        </text>
+      ))}
+      <text x={W} y={TL.labelY} className="chart__label" textAnchor="end">
+        24
+      </text>
+    </svg>
+  )
+}
+
+/** ISO → 本地 HH:MM */
+function fmtTime(iso: string): string {
+  const d = new Date(iso)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
 /** 今日按小时分布 */
@@ -250,6 +395,20 @@ export function Stats(): React.JSX.Element {
           <div className="card__empty">今天还没有完成的番茄</div>
         ) : (
           <HourChart data={data.todayByHour} />
+        )}
+      </section>
+
+      <section className="card">
+        <h3 className="card__title">今日时间线</h3>
+        {data.timeline.length === 0 ? (
+          <div className="card__empty">今天还没有专注记录</div>
+        ) : (
+          <>
+            <TimelineChart data={data.timeline} />
+            <div className="card__note">
+              横轴是 0–24 点，色块宽度是实际时长。休息段压暗，没跑完的段用虚线框。
+            </div>
+          </>
         )}
       </section>
 
