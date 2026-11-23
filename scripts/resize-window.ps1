@@ -22,13 +22,32 @@
 # here-string swallowed the line breaks and produced a source file that would
 # not compile.
 #
-# Usage: powershell -File scripts\resize-window.ps1 -Times 20
+# Usage: powershell -File scripts\resize-window.ps1 -Times 20 -ExePathLike '*\electron.exe'
+#
+# Process selection: by EXECUTABLE PATH only.
+# Filtering by a command line fragment is forbidden on purpose: the fragment
+# also shows up in the command line of the shell that runs this filter, so
+# the filter ends up killing its own runner (it happened once).
+# This file stays pure ASCII on purpose. Windows PowerShell 5.1 reads .ps1
+# files as ANSI when there is no BOM, so a Chinese literal in here would be
+# mangled and break the parser.
 
 param(
   [int]$Times = 20,
-  [string]$ProcessName = 'electron',
+  [string]$ExePathLike = '',
   [string]$CmdLineLike = ''
 )
+
+# Old switch, kept only to give a clear error instead of silently dragging
+# the wrong window (or none).
+if ($CmdLineLike -ne '') {
+  Write-Output 'USE_EXEPATH: filtering by command line fragment is forbidden. Use -ExePathLike.'
+  exit 2
+}
+if ($ExePathLike -eq '') {
+  Write-Output 'NO_EXEPATH: pass -ExePathLike <path wildcard>.'
+  exit 2
+}
 
 $src = @(
   'using System;',
@@ -65,16 +84,14 @@ if (-not ('Win32Move' -as [type])) {
   Add-Type -TypeDefinition $src
 }
 
-# Pick the process by name, and optionally narrow it down by a command line
-# fragment (several copies of the app can run side by side: an installed one
-# and a portable one under test -- the wrong one must not be dragged).
+# Pick the process by EXECUTABLE PATH (never by command line fragment).
+# Several copies of the app can run side by side: the user's installed one
+# and the packaged one under test -- the wrong one must not be dragged.
 $pids = @()
-foreach ($p in (Get-Process -Name $ProcessName -ErrorAction SilentlyContinue)) {
-  if ($CmdLineLike -ne '') {
-    $cim = Get-CimInstance Win32_Process -Filter ("ProcessId = " + $p.Id) -ErrorAction SilentlyContinue
-    if ($null -eq $cim -or $cim.CommandLine -notlike "*$CmdLineLike*") { continue }
-  }
-  $pids += $p.Id
+foreach ($cim in (Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)) {
+  if ($null -eq $cim.ExecutablePath) { continue }
+  if ($cim.ExecutablePath -notlike $ExePathLike) { continue }
+  $pids += $cim.ProcessId
 }
 if ($pids.Count -eq 0) {
   Write-Output 'NO_PROCESS'

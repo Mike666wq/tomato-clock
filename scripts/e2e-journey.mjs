@@ -19,12 +19,26 @@
 import { readFileSync, writeFileSync, renameSync, existsSync, readdirSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import path from 'node:path'
+import { preflight } from './preflight.mjs'
 
 const port = process.env.CDP_PORT ?? '9222'
 const stage = process.env.E2E_STAGE ?? 'journey'
 const projectRoot = process.cwd()
 const dataFile = process.env.E2E_DATA ?? path.join(projectRoot, '.tmp', 'e2e', 'data.json')
 const snapshotFile = process.env.E2E_SNAPSHOT ?? path.join(projectRoot, '.tmp', 'e2e', 'running.json')
+
+// ================= 开跑前自检 =================
+//
+// 肥鱼立的规矩：脚本没有前置自检，全靠人记文档 —— 记忆会失手，脚本不会。
+// 自检不过直接停，不许带病往下跑（带病跑出来的 FAIL 是"测试环境坏了"，
+// 不是"程序坏了" —— 这个误判已经吃过一次，15 项一起红）。
+const pre = preflight({
+  dataFile,
+  snapshotFile,
+  label: '端到端旅程',
+  needResize: true
+})
+console.log(`# 自检通过：userData=${pre.userData}`)
 
 const results = []
 function check(name, ok, detail = '') {
@@ -514,12 +528,11 @@ await sleep(800)
 let resizeOut = ''
 try {
   const resizeArgs = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
-    path.join(projectRoot, 'scripts', 'resize-window.ps1'), '-Times', '20',
-    '-ProcessName', process.env.E2E_RESIZE_PROC ?? 'electron']
-  // 机器上可能同时开着正式版和被测的打包版，必须只拖被测的那一个
-  if (process.env.E2E_RESIZE_CMD) {
-    resizeArgs.push('-CmdLineLike', process.env.E2E_RESIZE_CMD)
-  }
+    path.join(projectRoot, 'scripts', 'resize-window.ps1'), '-Times', '20']
+  // 机器上可能同时开着正式版和被测的打包版，必须只拖被测的那一个。
+  // **按可执行文件路径筛**，不按命令行片段筛（片段会匹配到"自己这条命令"）。
+  const resizeExe = process.env.E2E_RESIZE_EXE
+  if (resizeExe) resizeArgs.push('-ExePathLike', resizeExe)
   resizeOut = execFileSync('powershell', resizeArgs, { encoding: 'utf-8' })
 } catch (err) {
   resizeOut = `拖窗口失败：${err.message}`

@@ -17,6 +17,16 @@
 const port = process.env.CDP_PORT ?? '9222'
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
+// 开跑前自检（肥鱼立的规矩）：数据文件必须与被测实例的 userData 是同一处，
+// ELECTRON_RUN_AS_NODE 残留要清，进程筛选不许按命令行片段。
+import { preflight } from './preflight.mjs'
+const pre = preflight({
+  dataFile: process.env.E2E_DATA,
+  snapshotFile: process.env.E2E_SNAPSHOT,
+  label: '时间线布局测量'
+})
+console.log(`# 自检通过：userData=${pre.userData}`)
+
 async function targets() {
   const res = await fetch(`http://127.0.0.1:${port}/json`)
   return res.json()
