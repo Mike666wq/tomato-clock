@@ -1,0 +1,502 @@
+<!doctype html>
+<!--
+  v0.5 UI 静态稿 · A 版 · 极简
+
+  这是一张"设计稿"，不是产品代码：
+  - 深色底直接链的是真的 src/renderer/styles/tokens.css（颜色不许自己编）
+  - 浅色底和 --ink-3 是这个稿子本地补的（tokens.css 里还没有），
+    真要采纳这一版，得把它们合并进 tokens.css
+  - 数据全是写死的样例，不接真状态
+
+  用法：?screen=main|stats & ?theme=dark|light
+-->
+<html lang="zh-CN" data-phase="focus" data-theme="dark" data-screen="main">
+  <head>
+    <meta charset="utf-8" />
+    <title>v0.5 A 版静态稿</title>
+    <link rel="stylesheet" href="../../src/renderer/styles/tokens.css" />
+    <style>
+      /* ---- 稿子本地补的 token（真要采纳就并进 tokens.css）---- */
+      :root {
+        --ink-3: color-mix(in srgb, var(--ink-2) 62%, transparent);
+      }
+      html[data-theme='light'] {
+        --bg: #f4f5f7;
+        --surface: #ffffff;
+        --surface-2: #eceef1;
+        --line: #d8dce2;
+        --ink: #16181c;
+        --ink-2: #5b626d;
+        --ink-3: color-mix(in srgb, var(--ink-2) 66%, transparent);
+        --accent: #e8563f;
+        --break: #3f9c78;
+        --track: rgba(20, 22, 26, 0.1);
+        --on-phase: #ffffff;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #2a2d33;
+        font-family: var(--font-ui);
+        color: var(--ink);
+        display: grid;
+        place-items: center;
+      }
+      html[data-theme='light'] body {
+        background: #d9dce1;
+      }
+
+      /* 画板：480×620 的应用窗口 */
+      .frame {
+        --ring: 322px;
+        width: 480px;
+        height: 620px;
+        display: flex;
+        flex-direction: column;
+        background: var(--bg);
+        overflow: hidden;
+        box-shadow: 0 18px 60px rgba(0, 0, 0, 0.45);
+      }
+      .frame[hidden] {
+        display: none;
+      }
+      /* 最小窗口 420×560：环按可用空间缩，仍然塞得下，不压叠 */
+      .frame[data-size='small'] {
+        --ring: min(308px, 291px);
+        width: 420px;
+        height: 560px;
+      }
+
+      /* ---- 顶栏 ---- */
+      .top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 24px;
+        height: 34px;
+        flex: none;
+      }
+      .stage {
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.1em;
+        color: var(--ink-2);
+      }
+      .more {
+        width: 26px;
+        height: 26px;
+        display: grid;
+        place-items: center;
+        color: var(--ink-2);
+        border-radius: 7px;
+      }
+
+      /* ---- 圆环 ---- */
+      .ring-area {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: grid;
+        place-items: center;
+      }
+      .ring {
+        position: relative;
+        width: var(--ring);
+        height: var(--ring);
+      }
+      .ring svg {
+        width: 100%;
+        height: 100%;
+        transform: rotate(-90deg);
+        display: block;
+      }
+      .ring__track {
+        fill: none;
+        stroke: var(--track);
+        stroke-width: 8;
+      }
+      .ring__arc {
+        fill: none;
+        stroke: var(--phase);
+        stroke-width: 8;
+        stroke-linecap: round;
+        stroke-dasharray: 961;
+        stroke-dashoffset: 719;
+      }
+      .ring__center {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+      .time {
+        font-family: var(--font-num);
+        font-size: 96px;
+        font-weight: 200;
+        line-height: 1;
+        letter-spacing: -0.03em;
+        font-variant-numeric: tabular-nums;
+        color: var(--ink);
+      }
+      .task {
+        margin-top: 10px;
+        font-size: 13px;
+        color: var(--ink-2);
+      }
+
+      /* ---- 按钮组 ---- */
+      .controls {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 40px;
+        flex: none;
+        padding-bottom: 4px;
+      }
+      .btn {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        border: 1px solid var(--line);
+        background: transparent;
+        color: var(--ink-2);
+      }
+      .btn--main {
+        width: 72px;
+        height: 72px;
+        border: none;
+        background: var(--phase);
+        color: var(--on-phase);
+      }
+
+      /* ---- 状态行 ---- */
+      .status {
+        flex: none;
+        text-align: center;
+        font-size: 12px;
+        color: var(--ink-3);
+        padding: 22px 0 18px;
+      }
+
+      /* ---- 导航 ---- */
+      .nav {
+        flex: none;
+        height: 56px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 44px;
+        border-top: 1px solid var(--line);
+      }
+      .nav__item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 3px;
+        font-size: 11px;
+        color: var(--ink-3);
+      }
+      .nav__item--on {
+        color: var(--phase);
+      }
+
+      /* ---- 统计页 ---- */
+      .page {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
+        padding: 6px 20px 0;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 20px 12px;
+        text-align: center;
+      }
+      .card__num {
+        font-family: var(--font-num);
+        font-size: 28px;
+        font-weight: 300;
+        font-variant-numeric: tabular-nums;
+        color: var(--ink);
+      }
+      .card__cap {
+        margin-top: 6px;
+        font-size: 11px;
+        color: var(--ink-3);
+      }
+      .card__title {
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        color: var(--ink-2);
+        font-weight: 500;
+        margin: 0 0 12px;
+      }
+      .panel {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 20px;
+      }
+      .bars {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .bar__head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        color: var(--ink);
+      }
+      .bar__dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+      .bar__name {
+        flex: 1;
+      }
+      .bar__share {
+        font-size: 12px;
+        color: var(--ink-2);
+        font-variant-numeric: tabular-nums;
+      }
+      .bar__track {
+        height: 8px;
+        margin-top: 7px;
+        border-radius: 999px;
+        background: var(--track);
+        overflow: hidden;
+      }
+      .bar__fill {
+        height: 100%;
+        border-radius: 999px;
+        background: var(--accent);
+      }
+      .bar__meta {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 6px;
+        font-size: 11px;
+        color: var(--ink-3);
+      }
+      .bar__rate--warn {
+        color: var(--warn);
+      }
+      .grid-lines line {
+        stroke: var(--line);
+        stroke-width: 1;
+        opacity: 0.6;
+      }
+      .chart-bar {
+        fill: var(--accent);
+      }
+      .chart-label {
+        font-size: 9px;
+        fill: var(--ink-3);
+      }
+    </style>
+  </head>
+  <body>
+    <!-- ============ 主界面 ============ -->
+    <section class="frame" data-for="main">
+      <div class="top">
+        <span class="stage">专注</span>
+        <span class="more">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <circle cx="4" cy="9" r="1.3" fill="currentColor" stroke="none" />
+            <circle cx="9" cy="9" r="1.3" fill="currentColor" stroke="none" />
+            <circle cx="14" cy="9" r="1.3" fill="currentColor" stroke="none" />
+          </svg>
+        </span>
+      </div>
+
+      <div class="ring-area">
+        <div class="ring">
+          <svg viewBox="0 0 322 322">
+            <circle class="ring__track" cx="161" cy="161" r="153" />
+            <circle class="ring__arc" cx="161" cy="161" r="153" />
+          </svg>
+          <div class="ring__center">
+            <span class="time">18:42</span>
+            <span class="task">写方案</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <span class="btn">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4.2 4.6a6.4 6.4 0 1 1-1 5.6" />
+            <path d="M3 3.4v3.4h3.4" />
+          </svg>
+        </span>
+        <span class="btn btn--main">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+            <rect x="9.5" y="5.5" width="3.4" height="17" rx="1.4" fill="currentColor" />
+            <rect x="16.1" y="5.5" width="3.4" height="17" rx="1.4" fill="currentColor" />
+          </svg>
+        </span>
+        <span class="btn">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M4.4 4.4 12 9l-7.6 4.6Z" fill="currentColor" />
+            <rect x="12.6" y="4.4" width="1.8" height="9.2" rx="0.8" fill="currentColor" />
+          </svg>
+        </span>
+      </div>
+
+      <div class="status">今天 2 个 · 50 分钟</div>
+
+      <nav class="nav">
+        <span class="nav__item nav__item--on">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="10" cy="10" r="6.6" />
+            <path d="M10 6.6V10l2.4 1.6" />
+          </svg>
+          计时
+        </span>
+        <span class="nav__item">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3.6 15.4V10M8 15.4V5.4M12.4 15.4v-7M16.8 15.4V7.6" />
+          </svg>
+          统计
+        </span>
+        <span class="nav__item">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="10" cy="10" r="2.8" />
+            <path d="M10 2.8v2M10 15.2v2M17.2 10h-2M4.8 10h-2M15.1 4.9l-1.4 1.4M6.3 13.7l-1.4 1.4M15.1 15.1l-1.4-1.4M6.3 6.3 4.9 4.9" />
+          </svg>
+          设置
+        </span>
+      </nav>
+    </section>
+
+    <!-- ============ 统计页 ============ -->
+    <section class="frame" data-for="stats" hidden>
+      <div class="top">
+        <span class="stage">统计</span>
+        <span class="more"></span>
+      </div>
+      <div class="page">
+        <div class="cards">
+          <div class="card">
+            <div class="card__num">2</div>
+            <div class="card__cap">今日番茄</div>
+          </div>
+          <div class="card">
+            <div class="card__num">50</div>
+            <div class="card__cap">专注分钟</div>
+          </div>
+          <div class="card">
+            <div class="card__num">17%</div>
+            <div class="card__cap">打断率</div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3 class="card__title">按主题的时间占比</h3>
+          <div class="bars">
+            <div>
+              <div class="bar__head">
+                <span class="bar__dot"></span>
+                <span class="bar__name">写代码</span>
+                <span class="bar__share">62%</span>
+              </div>
+              <div class="bar__track"><div class="bar__fill" style="width: 62%"></div></div>
+              <div class="bar__meta"><span>3 个番茄 · 75 分钟</span><span class="bar__rate--warn">打断率 17%</span></div>
+            </div>
+            <div>
+              <div class="bar__head">
+                <span class="bar__dot" style="background: var(--break)"></span>
+                <span class="bar__name">未分类</span>
+                <span class="bar__share">38%</span>
+              </div>
+              <div class="bar__track"><div class="bar__fill" style="width: 38%; background: var(--break)"></div></div>
+              <div class="bar__meta"><span>2 个番茄 · 46 分钟</span><span>打断率 0%</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3 class="card__title">今日按小时分布</h3>
+          <svg viewBox="0 0 400 120" width="100%" height="120">
+            <g class="grid-lines">
+              <line x1="0" y1="30" x2="400" y2="30" />
+              <line x1="0" y1="60" x2="400" y2="60" />
+              <line x1="0" y1="90" x2="400" y2="90" />
+            </g>
+            <g>
+              <rect class="chart-bar" x="40" y="60" width="18" height="30" rx="3" opacity="0.9" />
+              <rect class="chart-bar" x="76" y="30" width="18" height="60" rx="3" opacity="0.55" />
+              <rect class="chart-bar" x="112" y="75" width="18" height="15" rx="3" opacity="0.9" />
+              <rect class="chart-bar" x="148" y="45" width="18" height="45" rx="3" opacity="0.9" />
+              <rect class="chart-bar" x="184" y="15" width="18" height="75" rx="3" opacity="0.55" />
+              <rect class="chart-bar" x="220" y="60" width="18" height="30" rx="3" opacity="0.9" />
+            </g>
+            <g class="chart-label">
+              <text x="44" y="112">9</text>
+              <text x="116" y="112">11</text>
+              <text x="188" y="112">14</text>
+              <text x="260" y="112">16</text>
+            </g>
+          </svg>
+        </div>
+      </div>
+      <nav class="nav">
+        <span class="nav__item">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="10" cy="10" r="6.6" />
+            <path d="M10 6.6V10l2.4 1.6" />
+          </svg>
+          计时
+        </span>
+        <span class="nav__item nav__item--on">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3.6 15.4V10M8 15.4V5.4M12.4 15.4v-7M16.8 15.4V7.6" />
+          </svg>
+          统计
+        </span>
+        <span class="nav__item">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="10" cy="10" r="2.8" />
+            <path d="M10 2.8v2M10 15.2v2M17.2 10h-2M4.8 10h-2M15.1 4.9l-1.4 1.4M6.3 13.7l-1.4 1.4M15.1 15.1l-1.4-1.4M6.3 6.3 4.9 4.9" />
+          </svg>
+          设置
+        </span>
+      </nav>
+    </section>
+
+    <script>
+      const q = new URLSearchParams(location.search)
+      const screen = q.get('screen') || 'main'
+      const theme = q.get('theme') || 'dark'
+      const size = q.get('size') || 'normal'
+      document.documentElement.dataset.screen = screen
+      document.documentElement.dataset.theme = theme
+      document.querySelectorAll('[data-for]').forEach((el) => {
+        el.hidden = el.dataset.for !== screen
+        if (size === 'small') el.dataset.size = 'small'
+      })
+    </script>
+  </body>
+</html>
