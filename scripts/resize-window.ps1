@@ -26,7 +26,8 @@
 
 param(
   [int]$Times = 20,
-  [string]$ProcessName = 'electron'
+  [string]$ProcessName = 'electron',
+  [string]$CmdLineLike = ''
 )
 
 $src = @(
@@ -64,7 +65,17 @@ if (-not ('Win32Move' -as [type])) {
   Add-Type -TypeDefinition $src
 }
 
-$pids = @(Get-Process -Name $ProcessName -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
+# Pick the process by name, and optionally narrow it down by a command line
+# fragment (several copies of the app can run side by side: an installed one
+# and a portable one under test -- the wrong one must not be dragged).
+$pids = @()
+foreach ($p in (Get-Process -Name $ProcessName -ErrorAction SilentlyContinue)) {
+  if ($CmdLineLike -ne '') {
+    $cim = Get-CimInstance Win32_Process -Filter ("ProcessId = " + $p.Id) -ErrorAction SilentlyContinue
+    if ($null -eq $cim -or $cim.CommandLine -notlike "*$CmdLineLike*") { continue }
+  }
+  $pids += $p.Id
+}
 if ($pids.Count -eq 0) {
   Write-Output 'NO_PROCESS'
   exit 1

@@ -513,12 +513,14 @@ await evaluate(main, 'window.pomodoro.settings.save({volume:0.77})').catch(() =>
 await sleep(800)
 let resizeOut = ''
 try {
-  resizeOut = execFileSync(
-    'powershell',
-    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
-      path.join(projectRoot, 'scripts', 'resize-window.ps1'), '-Times', '20'],
-    { encoding: 'utf-8' }
-  )
+  const resizeArgs = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+    path.join(projectRoot, 'scripts', 'resize-window.ps1'), '-Times', '20',
+    '-ProcessName', process.env.E2E_RESIZE_PROC ?? 'electron']
+  // 机器上可能同时开着正式版和被测的打包版，必须只拖被测的那一个
+  if (process.env.E2E_RESIZE_CMD) {
+    resizeArgs.push('-CmdLineLike', process.env.E2E_RESIZE_CMD)
+  }
+  resizeOut = execFileSync('powershell', resizeArgs, { encoding: 'utf-8' })
 } catch (err) {
   resizeOut = `拖窗口失败：${err.message}`
 }
@@ -590,7 +592,12 @@ check('D3 跨零点的番茄：不计入今天（按开始时间属于昨天）'
 // 主进程到了零点会重算并推一次，主界面的"今天"必须归零，
 // 而且和统计页一致（不能一个 0 一个 1）。
 const hasClock = await evaluate(main, 'typeof window.pomodoro.dev?.clockSet === "function"')
-if (!hasClock) {
+const skipDev = process.env.E2E_SKIP_DEV === '1'
+if (!hasClock && skipDev) {
+  // 打包版没有开发期的时钟口子（这是对的：产物里不该有开发期入口）。
+  // 这一条只能在开发版上验，打包版跳过。
+  console.log('SKIP D4（打包版没有开发期时钟口子）')
+} else if (!hasClock) {
   check('D4 跨零点后主界面归零且与统计页一致', false,
     '这个构建没有开发期的时钟口子（要用开发版跑这一条）')
 } else {
