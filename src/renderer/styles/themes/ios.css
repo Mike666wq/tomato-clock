@@ -9,7 +9,10 @@
  * v0.5 第 1 步只把**颜色和形状变量**做进来（分段控件、卡片等结构属于第 4 步）。
  */
 
-:root[data-theme='ios'] {
+/* 选择器带两条：整体切主题用 :root[... ]，
+   设置页的缩略预览卡用 [data-theme='ios'] 单独借用这一套变量。 */
+:root[data-theme='ios'],
+[data-theme='ios'] {
   /* ---------- 深色 ---------- */
   --bg: #000000;
   --surface: #1c1c1e;
@@ -45,7 +48,8 @@
   --glow-arc: none;
 }
 
-:root[data-theme='ios'][data-mode='light'] {
+:root[data-theme='ios'][data-mode='light'],
+[data-theme='ios'][data-mode='light'] {
   /* ---------- 浅色 ---------- */
   --bg: #f2f2f7;
   --surface: #ffffff;

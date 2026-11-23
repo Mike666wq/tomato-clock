@@ -14,7 +14,12 @@
  * 结构覆盖块（按钮形态这种没法用变量表达的）也集中在这里，不许散进组件。
  */
 
-:root[data-theme='paper'] {
+/* 选择器带两条：
+   - :root[data-theme='paper']：整个界面切到纸感
+   - [data-theme='paper']：任何一块小区域也能借用纸感的变量
+     （设置页的缩略预览卡就是靠这条，把纸感的样子缩到卡片里） */
+:root[data-theme='paper'],
+[data-theme='paper'] {
   /* ---------- 颜色 ---------- */
   --bg: #f4f1ea; /* 暖白，不是纯白 */
   --surface: #fbf9f4; /* 卡片比底略亮一点 */
@@ -23,6 +28,9 @@
   --ink: #17170f; /* 墨黑，不是纯黑 */
   --ink-2: #8a8578;
   --ink-3: color-mix(in srgb, var(--ink-2) 80%, transparent);
+  /* 次要文字再暗一档：12px 的小字用 --ink-2 在浅底上偏淡（对比度约 3:1），
+     统计页的图例、模板名这类要看清的东西用这一档 */
+  --ink-2-strong: color-mix(in srgb, var(--ink) 45%, var(--ink-2));
   --accent: #b8472c; /* 砖红，压低饱和 */
   --break: #4f7a5b;
   --warn: #8a6a1f;
@@ -58,6 +66,38 @@
   --glow-arc: none;
 }
 
+/* 卡片标题（12px）在浅底上偏淡，提一档 */
+:root[data-theme='paper'] .card__title {
+  color: var(--ink-2-strong);
+}
+
+/* ---------- 统计页的图表：浅纸上的柱子 ----------
+   浅底上的图表比深底难做：柱子颜色对比度要够，
+   不能拿 6% 那种淡色当柱子（深底上的"次要柱"，在浅纸上等于没有）。
+   淡柱用 26% 墨色，实柱用砖红，都要在纸上有足够对比度。 */
+:root[data-theme='paper'] .chart__bar--muted {
+  fill: color-mix(in srgb, var(--ink) 26%, transparent);
+}
+
+:root[data-theme='paper'] .chart__track {
+  fill: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+
+:root[data-theme='paper'] .chart__label,
+:root[data-theme='paper'] .chart__value {
+  fill: var(--ink-2-strong);
+}
+
+/* 主题时间占比的横条：底槽在浅纸上要看得见 */
+:root[data-theme='paper'] .topic-bar__track {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+/* 数字卡的次要说明（"含历史"） */
+:root[data-theme='paper'] .stats__sub {
+  color: var(--ink-2-strong);
+}
+
 /* ================= 结构覆盖：纸感的形态 ================= */
 
 /* 标题栏：去掉"番茄钟"三个字，只留拖拽区和最小化/关闭。
@@ -85,14 +125,31 @@
   display: none;
 }
 
-/* 主题行的小圆点：纸感的语言是"线"不是"点"。
-   选中项已经有砖红下划线，只有它保留一个点。 */
+/* 模板/主题两行改居中：这一页其它东西（时间、按钮、状态行、导航）都是居中的，
+   只有这两行左对齐，右边空一大块，像没排完。 */
+:root[data-theme='paper'] .presets,
+:root[data-theme='paper'] .topics {
+  justify-content: center;
+}
+
+/* 主题行的小圆点：纸感里全部去掉。
+   圆点在名字前面会把一句话劈成两半（未分类 ●操作系统复习），
+   而选中项已经有砖红下划线了——纸感的语言本来就是"线"。 */
 :root[data-theme='paper'] .topics__dot {
   display: none;
 }
 
-:root[data-theme='paper'] .topics__chip--on .topics__dot {
-  display: inline-block;
+/* 标签字号 12px、颜色提一档：11–12px 在浅底上偏细偏淡，缩放后几乎看不清。
+   --ink-2-strong 是"次要文字再暗一点"的中间档，对比度够又不抢戏。 */
+:root[data-theme='paper'] .presets__chip,
+:root[data-theme='paper'] .topics__chip {
+  font-size: var(--fs-small);
+  color: var(--ink-2-strong);
+}
+
+:root[data-theme='paper'] .presets__chip--on,
+:root[data-theme='paper'] .topics__chip--on {
+  color: var(--ink);
 }
 
 /* ---------- 垂直节奏 ----------

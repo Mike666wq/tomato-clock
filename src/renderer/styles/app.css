@@ -291,7 +291,7 @@ button {
 }
 
 .card {
-  padding: 14px 16px 16px;
+  padding: 20px;
   border-radius: var(--r-md);
   background: var(--surface);
   border: 1px solid var(--line);
@@ -329,7 +329,7 @@ button {
 
 .stats__head > div {
   flex: 1;
-  padding: 12px 10px;
+  padding: 14px 10px;
   text-align: center;
   border-radius: var(--r-md);
   background: var(--surface);
@@ -389,6 +389,8 @@ button {
 .chart__axis {
   stroke: var(--line);
   stroke-width: 1;
+  /* 网格线降到 --line 的 60%：它是背景，不是数据 */
+  opacity: 0.6;
 }
 
 .chart__bar {
@@ -543,6 +545,129 @@ button {
 .slider {
   width: 140px;
   accent-color: var(--accent);
+}
+
+/* ---------- 外观：主题选择（v0.5 第 3 步） ---------- */
+
+/* 三张缩略卡，不是下拉框：用户看不懂"纸感""霓虹"这两个字 */
+.theme-cards {
+  display: flex;
+  gap: 10px;
+}
+
+.theme-card {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 6px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+}
+
+.theme-card:hover {
+  background: var(--hover);
+}
+
+/* 当前选中的加边框 */
+.theme-card--on {
+  border-color: var(--phase);
+  background: var(--phase-faint);
+}
+
+/* 缩略预览：借用各套主题自己的变量（[data-theme='paper'] 这类选择器），
+   所以纸感那张真的是暖白底 + 一根细弧 + 衬线数字的缩影，不是画出来的色块 */
+.theme-card__preview {
+  position: relative;
+  width: 120px;
+  height: 80px;
+  overflow: hidden;
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  border: 1px solid var(--line);
+}
+
+.theme-card__ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 46px;
+  height: 46px;
+  transform: translate(-50%, -50%);
+  /* 霓虹那套的发光要溢出 SVG 的框，否则光被裁成一个方块 */
+  overflow: visible;
+}
+
+.theme-card__arc {
+  fill: none;
+  stroke: var(--phase);
+  stroke-width: var(--ring-stroke);
+  /* 霓虹那套的发光也照搬过来 */
+  filter: var(--glow-arc, none);
+}
+
+.theme-card__time {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-num);
+  font-weight: var(--font-num-weight, 300);
+  font-size: 15px;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.theme-card__name {
+  font-size: var(--fs-small);
+  color: var(--ink);
+}
+
+.theme-card__desc {
+  font-size: 10px;
+  line-height: 1.3;
+  color: var(--ink-2);
+  text-align: center;
+}
+
+/* 深浅那一行 */
+.theme-modes {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.theme-modes__label,
+.theme-modes__fixed {
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+}
+
+.theme-seg {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.theme-seg__item {
+  height: 24px;
+  padding: 0 12px;
+  border-radius: max(2px, calc(var(--r-sm) - 2px));
+  font-size: var(--fs-tiny);
+  color: var(--ink-2);
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+
+.theme-seg__item--on {
+  background: var(--surface);
+  color: var(--ink);
 }
 
 /* ---------- 底部状态 ---------- */

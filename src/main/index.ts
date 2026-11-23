@@ -303,6 +303,27 @@ function createWindow(): BrowserWindow {
     }
   })
 
+  /**
+   * 双击标题栏 = 最大化/还原（Windows 的肌肉记忆，缺了会觉得窗口卡住了）。
+   *
+   * 为什么在主进程认：标题栏是 `-webkit-app-region: drag` 的拖拽区，
+   * **拖拽区不把鼠标事件送给页面**（实测 dblclick 一次都不触发），
+   * 所以渲染层根本收不到这个双击。
+   * `input-event` 是 Electron 自己在浏览器进程里收到的鼠标事件，带 clickCount，
+   * 在这里认 clickCount===2 就够了。
+   *
+   * 只认窗口最上面那一条（y < 30）：再往下是阶段标签和内容区，
+   * 双击那里不该动窗口。纸感的主题栏高 32、其它主题 44，30 都在标题栏里。
+   */
+  win.webContents.on('input-event', (_e, input) => {
+    const ev = input as Electron.MouseInputEvent
+    if (ev.type !== 'mouseDown' || ev.button !== 'left') return
+    if (ev.clickCount !== 2) return
+    if (ev.y > 30) return
+    if (win.isMaximized()) win.unmaximize()
+    else win.maximize()
+  })
+
   const devUrl = process.env['ELECTRON_RENDERER_URL']
   // DEV 判断不能省：这一段里的开发期变量名不能进打包产物
   if (import.meta.env.DEV && devUrl) {

@@ -13,7 +13,10 @@
  * 这是已知的不完整状态，不是最终稿。
  */
 
-:root[data-theme='neon'] {
+/* 选择器带两条：整体切主题用 :root[... ]，
+   设置页的缩略预览卡用 [data-theme='neon'] 单独借用这一套变量。 */
+:root[data-theme='neon'],
+[data-theme='neon'] {
   /* ---------- 颜色 ---------- */
   --bg: #08090b;
   --surface: rgba(255, 255, 255, 0.035);

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { keyCapture } from '../keyCapture'
 import { PresetManager } from '../components/PresetManager'
 import { TopicManager } from '../components/TopicManager'
+import { ThemePicker } from '../components/ThemePicker'
 import { BUILTIN_PRESETS } from '../../shared/presets'
 import { DEFAULT_SETTINGS, type Settings, type ShortcutDef } from '../../shared/types'
 
@@ -87,6 +88,15 @@ export function SettingsPage({ onNotice }: Props): React.JSX.Element {
 
   return (
     <div className="main main--page" ref={rootRef}>
+      <section className="card">
+        <h3 className="card__title">外观</h3>
+        <ThemePicker
+          theme={settings.uiTheme ?? 'paper'}
+          mode={settings.uiMode ?? 'system'}
+          onPick={(theme, mode) => patch({ uiTheme: theme, uiMode: mode })}
+        />
+      </section>
+
       <PresetManager
         presets={settings.presets}
         activeId={settings.activePresetId}
