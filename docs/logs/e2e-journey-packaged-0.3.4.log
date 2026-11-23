@@ -1,0 +1,39 @@
+# main  = file:///C:/Users/bbben/AppData/Local/Temp/3MVmTmUwjzRD1zfrpCS5cmXZPOh/resources/app.asar/out/renderer/index.html
+# island= file:///C:/Users/bbben/AppData/Local/Temp/3MVmTmUwjzRD1zfrpCS5cmXZPOh/resources/app.asar/out/renderer/island.html
+# 起始 sessions = 0
+PASS S0b 切到 1 分钟模板后这一段就是 60 秒 :: totalSec=60
+PASS S1 开始后主窗口 running=true :: running=true
+PASS S1 灵动岛跟着变 running=true :: island=true
+PASS S1 两窗口读数一致（差 ≤1 秒） :: main=59 island=59
+PASS S2 暂停后剩余时间冻结 :: 暂停时=59 一秒半后=59
+PASS S2 暂停后 running=false :: running=false
+PASS S3 继续后 running=true 且剩余在减 :: running=true 剩余=58(暂停时 59)
+PASS S4 跳过后进短休（不是长休） :: phase=short
+PASS S4 跳过后不自动开始 :: running=false
+PASS S4 跳过写了一条 completed=false 的专注记录 :: 新增=1 最后一条 completed=false
+PASS S4 跳过不计入"今天 N 个" :: 界面=0 磁盘=0
+PASS S4b 跳过休息段不写记录 :: sessions=1（期望 1）
+PASS S4b 跳过休息段后回到专注段 :: phase=focus
+PASS S5 专注段在跑 :: running=true phase=focus 剩余=59
+PASS S5 跑完后进短休 :: phase=short
+PASS S5 落了一条 completed=true 的专注记录 :: 新增=2 completed=true plannedSec=60
+PASS S5 记录的 plannedSec 是这一段冻结的时长（60） :: plannedSec=60
+PASS S5 记录的 actualSec 与计划一致 :: actualSec=60
+PASS S6 提交后任务名与打断原因写回磁盘 :: task=写代码 interrupt=internal
+PASS S7 主界面状态行与 data.json 一致（按开始时间） :: 状态行=1 磁盘=1
+PASS S7 主进程汇总与 data.json 一致（按开始时间） :: 汇总=1 磁盘=1
+PASS S7 统计页与主界面今日数一致（按开始时间） :: 统计页=1 磁盘(按开始时间)=1
+PASS D1 并发保存两个不相干的设置：20 轮零丢失 :: 20 轮都没丢
+PASS D5 传一个坏值：磁盘文件一个字节都没变 :: 前 2265 字节 / 后 2265 字节
+PASS D5 传一个坏值：界面上有提示 :: 收到的提示：["设置没保存：界面主题不认识（123）"]
+PASS D5 传一个坏值：提示条真的显示出来了 :: 提示条内容="设置没保存：界面主题不认识（123）"
+PASS D5b 删掉正在用的模板：删除生效了，且没有报错 :: 模板数=4(期望 4) 当前模板=builtin-classic
+PASS D2 拖窗口 20 次后，主题/音量/模板都还在 :: 主题=ios(期望 ios) 音量=0.77(期望 0.77) 模板=builtin-classic(期望 builtin-classic)；RESIZED 20
+PASS S9 灵动岛切模板后主界面高亮跟着变 :: 主界面高亮="深度50/10" 期望包含="深度"
+PASS S9 两窗口计时读数一致 :: island=short/600 main=short/600
+PASS D3 跨零点的番茄：主界面与统计页给出同一个数 :: 主界面=1 统计页=1（旧口径按结束时间算是 2）
+PASS D3 跨零点的番茄：不计入今天（按开始时间属于昨天） :: 今天=1 期望=1（这条属于昨天）
+SKIP D4（打包版没有开发期时钟口子）
+
+===== 汇总 =====
+共 32 项，失败 0 项
