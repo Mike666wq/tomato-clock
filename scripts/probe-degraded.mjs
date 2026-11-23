@@ -1,0 +1,85 @@
+// 验一条降级行为：**没有音乐会话时**，灵动岛那一行要整个消失，
+// 不留空行、不报错（肥鱼的验收清单里的一条）。
+//
+// 用法：起开发版 → node scripts/probe-degraded.mjs
+
+const port = process.env.CDP_PORT ?? '9222'
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+const list = await (await fetch(`http://127.0.0.1:${port}/json`)).json()
+const t = list.find((x) => x.type === 'page' && x.url.includes('island.html'))
+if (!t) {
+  console.log('NO_ISLAND_TARGET')
+  process.exit(1)
+}
+const ws = new WebSocket(t.webSocketDebuggerUrl)
+await new Promise((r) => (ws.onopen = r))
+let id = 0
+function send(method, params) {
+  return new Promise((resolve) => {
+    const mid = ++id
+    const onMessage = (ev) => {
+      const msg = JSON.parse(ev.data)
+      if (msg.id === mid) {
+        ws.removeEventListener('message', onMessage)
+        resolve(msg.result?.result?.value)
+      }
+    }
+    ws.addEventListener('message', onMessage)
+    ws.send(JSON.stringify({ id: mid, method, params }))
+  })
+}
+const evaluate = (expr) =>
+  send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true })
+
+const results = []
+function check(name, pass, detail) {
+  results.push({ name, pass })
+  console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}\n      ${detail}`)
+}
+
+// 先记下有没有报错
+await evaluate(`
+  window.__errs = 0
+  window.addEventListener('error', () => { window.__errs++ })
+  window.addEventListener('unhandledrejection', () => { window.__errs++ })
+  true
+`)
+
+// 打开音乐控制（但**不伪造**任何媒体状态 —— 模拟"QQ 音乐没开"）
+await evaluate(`
+  window.island.settings.save({ showMusicControl: true })
+  window.island.island.setMode('expanded', true)
+  true
+`)
+await sleep(2000)
+
+const musicRow = await evaluate(`!!document.querySelector('.island__music')`)
+const state = await evaluate(`window.island.media.getState()`)
+const volume = await evaluate(`window.island.media.getVolume()`)
+const errs = await evaluate(`window.__errs ?? 0`)
+
+check(
+  '没有音乐会话时，音乐那一行整个消失（不留空行）',
+  musicRow === false,
+  `.island__music=${musicRow}`
+)
+check('主进程媒体状态是 null', state === null, `state=${JSON.stringify(state)}`)
+check(
+  '音量照样读得到（音量是系统级的，跟有没有歌在放无关）',
+  typeof volume === 'number',
+  `volume=${volume}`
+)
+check('没有报错', errs === 0, `错误数=${errs}`)
+
+// 连续 10 次点"开/关音乐控制"也不该塌
+for (let i = 0; i < 10; i++) {
+  await evaluate(`window.island.island.setMode('expanded', ${i % 2 === 0 ? 'true' : 'false'})`)
+  await sleep(80)
+}
+const alive = await evaluate(`!!document.querySelector('.island')`)
+check('连续 10 次切换展开/收起，岛还在（不塌）', alive === true, `.island=${alive}`)
+
+const failed = results.filter((r) => !r.pass)
+console.log(`\n# 汇总：${results.length} 项，通过 ${results.length - failed.length}，失败 ${failed.length}`)
+process.exit(failed.length ? 1 : 0)
