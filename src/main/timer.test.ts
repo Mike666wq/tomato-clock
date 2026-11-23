@@ -143,6 +143,26 @@ describe('A 基本计时', () => {
     expect(s.remainingSec).toBe(3000)
   })
 
+  it('L9 开头就暂停也算"跑过"：改时长不当场生效', () => {
+    // 按开始又立刻暂停：剩余还是整段，但这段已经"跑过"了
+    timer.apply('start')
+    timer.apply('pause')
+    expect(timer.getState().remainingSec).toBe(timer.getState().totalSec)
+
+    timer.updateSettings({ ...CFG, focusMin: 50 })
+    const s = timer.getState()
+    expect(s.totalSec).toBe(60) // 当前段不变
+    expect(s.remainingSec).toBe(60)
+  })
+
+  it('L9b 重置之后又回到"没跑过"：改时长立刻生效', () => {
+    timer.apply('start')
+    advanceSec(5)
+    timer.apply('reset')
+    timer.updateSettings({ ...CFG, focusMin: 50 })
+    expect(timer.getState().totalSec).toBe(3000)
+  })
+
   it('A7 连续暂停/恢复 5 次：pausedSec 是 5 次之和（误差 ≤ 1 秒）', () => {
     timer.apply('start')
     let pausedTotal = 0

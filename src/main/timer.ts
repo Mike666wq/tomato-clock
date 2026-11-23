@@ -48,8 +48,14 @@ export class Timer {
    * 否则圆环的分母会当场跳一下。
    */
   private segmentTotalSec = 0
-  /** 当前阶段累计暂停毫秒 */
+  /** 当前这一段累计暂停毫秒 */
   private pausedMs = 0
+  /**
+   * 这一段有没有真的跑起来过（L9）。
+   * 不用"剩余 == 总长"来判断未开始——用户在开头就暂停时两者相等，
+   * 但那也是跑过了，改时长就不该当场生效。
+   */
+  private segmentHasRun = false
   /** 本次暂停的开始时刻 */
   private pauseStartedAt: number | null = null
   /**
@@ -142,7 +148,11 @@ export class Timer {
   updateSettings(cfg: TimerConfig): void {
     this.cfg = cfg
     const newTotal = this.phaseSec(this.phase)
-    const notStarted = !this.running && this.remainingSecCached === this.segmentTotalSec
+    // L9：判断"这一段有没有开始过"不能看"剩余 == 总长"。
+    // 用户在开头就按了暂停，剩余确实等于总长，但那也是"跑过"——
+    // 按老写法，这种情况下改时长会当场生效，和 A4/A5 冲突。
+    // 改用"这一段有没有真的跑起来过"这个标记。
+    const notStarted = !this.segmentHasRun
     if (notStarted && newTotal !== this.segmentTotalSec) {
       this.segmentTotalSec = newTotal
       this.remainingSecCached = newTotal
@@ -208,6 +218,7 @@ export class Timer {
     if (this.remainingSecCached === 0) this.remainingSecCached = this.segmentTotalSec
     this.endsAt = this.now() + this.remainingSecCached * 1000
     this.running = true
+    this.segmentHasRun = true
     // 恢复计时：把这次暂停的时长累计进去
     if (this.pauseStartedAt !== null) {
       this.pausedMs += this.now() - this.pauseStartedAt
@@ -242,6 +253,8 @@ export class Timer {
     this.endsAt = null
     this.pauseStartedAt = null
     this.pausedMs = 0
+    // 重置后这一段又回到"没跑过"：改时长会立刻生效
+    this.segmentHasRun = false
     this.phaseStartedAt = this.now()
     this.remainingSecCached = this.segmentTotalSec
     this.segmentTopicId = this.cfg.topicId
@@ -334,6 +347,8 @@ export class Timer {
     this.endsAt = null
     this.pauseStartedAt = null
     this.pausedMs = 0
+    // 新的一段：还没跑过
+    this.segmentHasRun = false
     this.phaseStartedAt = endedAt
     // 新的一段开始：主题用"此刻"选中的那个（用户可能刚在休息里切过）
     this.segmentTopicId = this.cfg.topicId
