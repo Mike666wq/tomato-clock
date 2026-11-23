@@ -117,6 +117,14 @@ const api = {
       return () => {
         ipcRenderer.removeListener('nav:page', listener)
       }
+    },
+    /** 主进程让界面滚到某一块（灵动岛的「＋ 主题」把人送到设置页的主题那块） */
+    onSection: (cb: (section: string) => void): (() => void) => {
+      const listener = (_e: unknown, section: string): void => cb(section)
+      ipcRenderer.on('nav:section', listener)
+      return () => {
+        ipcRenderer.removeListener('nav:section', listener)
+      }
     }
   }
 }

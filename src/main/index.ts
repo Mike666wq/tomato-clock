@@ -657,6 +657,12 @@ if (!app.requestSingleInstanceLock()) {
         scheduleMidnightRefresh()
         return nowDate().toISOString()
       })
+      // 开发期：伪造一条"正在放的歌"，用来截灵动岛音乐行的图。
+      // 走的是**真实的广播通道**（media:state），不是给渲染层开后门。
+      ipcMain.handle('media:dev-fake', (_e, state: unknown) => {
+        broadcast('media:state', state)
+        return true
+      })
       // 开发期：正常退出（= app.quit，会走 before-quit 落盘）。
       // 用来自动化验证崩溃恢复（规格 E1）：托盘里的"退出"没法用脚本点。
       ipcMain.on('app:dev-quit', () => {
@@ -674,6 +680,12 @@ if (!app.requestSingleInstanceLock()) {
       island?.setMode(mode, withMusic)
     )
     ipcMain.on('island:open-main', () => showWindow())
+    // 灵动岛的「＋ 主题」：把人送到主窗口的设置页主题那块去建一个
+    ipcMain.on('island:open-topics', () => {
+      showWindow()
+      mainWindow?.webContents.send('nav:page', 'settings')
+      mainWindow?.webContents.send('nav:section', 'topics')
+    })
     // 就地编辑任务名之前，让浮层真的拿到键盘焦点（否则字符打到主窗口里）
     ipcMain.on('island:focus', () => {
       const win = island?.win

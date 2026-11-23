@@ -1,13 +1,18 @@
 // 主题选择条（v0.3-b）：一排带颜色点的小胶囊。
 //
-// 允许不选（"未分类"），不强制——强制会让人为了开始计时先建个主题，这是劝退。
+// v0.6：**不再有"未分类"这个选项**。
+// "未分类"是数据概念（记录里没挂主题），不是能选的东西 —
+// 摆出来会让人以为"未分类"是个主题，可它其实是"没选"。
+// 现在没选的时候显示「＋ 主题」（去建一个），选了显示主题名。
+// 想取消选择：再点一次已选中的那个。
+//
 // 计时进行中切主题只影响下一段。
 //
 // v0.2.2：整行左对齐，前面加一个"主题"小标签。
-// 之前整行居中，只有一个"未分类"时孤零零飘在中间，看着像忘了点什么。
+// 之前整行居中，只有一个选项时孤零零飘在中间，看着像忘了点什么。
 //
 // v0.2.3：高亮跟"用户选中的"（activeId），不再跟"这一段正在用的"走。
-// 切主题只影响下一段，之前拿 state.topicId 做高亮，用户点了「未分类」界面纹丝不动，
+// 切主题只影响下一段，之前拿 state.topicId 做高亮，用户点了界面纹丝不动，
 // 看起来就是"点了没反应"。正在跑的那段用的哪个，用一个小「本段」标记单独标出来。
 
 import { useEffect, useRef, useState } from 'react'
@@ -22,9 +27,18 @@ type Props = {
   onPick: (id: string | null) => void
   /** 紧凑模式：灵动岛里用 */
   compact?: boolean
+  /** 「＋ 主题」：去建一个主题。没有这个入口，第一次用的人不知道主题从哪来 */
+  onAdd?: () => void
 }
 
-export function TopicBar({ topics, activeId, currentId, onPick, compact }: Props): React.JSX.Element {
+export function TopicBar({
+  topics,
+  activeId,
+  currentId,
+  onPick,
+  compact,
+  onAdd
+}: Props): React.JSX.Element {
   const live = [...topics].filter((t) => !t.archived).sort((a, b) => a.order - b.order)
   const scrollRef = useRef<HTMLDivElement>(null)
   const [overflow, setOverflow] = useState(false)
@@ -45,25 +59,25 @@ export function TopicBar({ topics, activeId, currentId, onPick, compact }: Props
 
   const chips = (
     <>
-      <button
-        className={activeId === null ? 'topics__chip topics__chip--on' : 'topics__chip'}
-        onClick={() => onPick(null)}
-      >
-        <span className="topics__dot" style={{ background: 'var(--ink-2)' }} />
-        未分类
-        {showCurrent && currentId === null ? <em className="topics__tag">本段</em> : null}
-      </button>
       {live.map((t) => (
         <button
           key={t.id}
           className={t.id === activeId ? 'topics__chip topics__chip--on' : 'topics__chip'}
-          onClick={() => onPick(t.id)}
+          onClick={() => onPick(t.id === activeId ? null : t.id)}
         >
           <span className="topics__dot" style={{ background: t.color }} />
           {t.name}
           {showCurrent && currentId === t.id ? <em className="topics__tag">本段</em> : null}
         </button>
       ))}
+      {/* 这一段没挂主题，但用户选了别的 —— 说清楚，别让人以为这段也会记到那个主题上。
+          这里只说明，不给"未分类"这个可点的选项 */}
+      {showCurrent && currentId === null ? <span className="topics__note">本段没挂主题</span> : null}
+      {onAdd ? (
+        <button className="topics__chip topics__chip--add" onClick={onAdd}>
+          ＋ 主题
+        </button>
+      ) : null}
     </>
   )
   if (compact) {

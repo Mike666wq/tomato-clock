@@ -33,7 +33,12 @@ function format(sec: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
-export function Timer(): React.JSX.Element {
+type Props = {
+  /** 「＋ 主题」：去设置页建一个主题 */
+  onOpenTopics?: () => void
+}
+
+export function Timer({ onOpenTopics }: Props): React.JSX.Element {
   const [state, setState] = useState<TimerState>(FALLBACK)
   const [summary, setSummary] = useState<RecordSummary>(EMPTY_SUMMARY)
   const [settings, setSettings] = useState<Settings | null>(null)
@@ -196,6 +201,7 @@ export function Timer(): React.JSX.Element {
             activeId={settings.activeTopicId ?? null}
             currentId={state.topicId ?? null}
             onPick={(id) => window.pomodoro?.settings.save({ activeTopicId: id })}
+            onAdd={onOpenTopics}
           />
         ) : null}
 

@@ -324,10 +324,16 @@ button {
   color: var(--ink-2);
 }
 
+/* 空态：卡片照常渲染，里面居中一行小字。
+   高度不低于 88px —— 空的那块也得有块面，不然看着像没做完。 */
 .card__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 88px;
   padding: 18px 0;
   font-size: var(--fs-small);
-  color: var(--ink-2);
+  color: var(--ink-3);
   text-align: center;
 }
 
@@ -338,9 +344,17 @@ button {
   gap: 10px;
 }
 
-.stats__head > div {
-  flex: 1;
-  padding: 14px 10px;
+/* 三张卡同构：数字 + 单位 + 标签。
+   flex: 1 1 0 保证等宽；align-items 默认 stretch 保证等高。 */
+.stats__card {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 76px;
+  padding: 14px 8px 12px;
   text-align: center;
   border-radius: var(--r-md);
   background: var(--surface);
@@ -428,6 +442,21 @@ button {
 
 .chart__track {
   fill: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+
+/* 最大值参考线：只有一根柱子时，没有参照就不知道它有多高。
+   极淡的虚线 + 一个小字标出上限，别抢数据的戏。 */
+.chart__ref {
+  stroke: var(--line);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+  opacity: 0.75;
+}
+
+.chart__ref-label {
+  font-size: 9px;
+  fill: var(--ink-3);
+  font-family: var(--font-ui);
 }
 
 .chart__label {
@@ -1122,6 +1151,29 @@ button {
   flex: none;
 }
 
+/* 「＋ 主题」：不是选项，是"这儿可以建一个"的入口。
+   虚线描边 + --ink-3，比正常胶囊窄一点 —— 它是提示，不该抢戏 */
+.topics__chip--add {
+  color: var(--ink-3);
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--ink-3) 55%, transparent);
+  padding: 0 10px;
+}
+
+.topics__chip--add:hover {
+  color: var(--ink-2);
+  border-color: var(--ink-2);
+  background: transparent;
+}
+
+/* 说明文字：这一段没挂主题但用户选了别的。只说明，不给可点的伪选项 */
+.topics__note {
+  flex: none;
+  font-size: var(--fs-tiny);
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
 /* 「本段」标记：只有"选中的主题"和"这一段正在用的主题"不一致时才出现。
    告诉用户"你刚切的那个下一段才生效，现在跑的这段还是这个"。 */
 .topics__tag {
@@ -1303,9 +1355,24 @@ button {
 
 .topic-bar__name {
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 分钟数：横条那一行里跟主题名并排，一眼看到"花了多久" */
+.topic-bar__min {
+  flex: none;
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
 }
 
 .topic-bar__share {
+  flex: none;
+  min-width: 34px;
+  text-align: right;
   font-size: var(--fs-small);
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;

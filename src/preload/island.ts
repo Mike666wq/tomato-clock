@@ -35,7 +35,9 @@ const api = {
     /** 打开主窗口（完整界面） */
     openMain: (): void => ipcRenderer.send('island:open-main'),
     /** 主动要键盘焦点（就地编辑任务名之前必须调，否则输入跑到主窗口去了） */
-    focus: (): void => ipcRenderer.send('island:focus')
+    focus: (): void => ipcRenderer.send('island:focus'),
+    /** 打开主窗口的主题分区（灵动岛的「＋ 主题」就是它） */
+    openTopics: (): void => ipcRenderer.send('island:open-topics')
   },
   media: {
     /** 当前在放什么；null = 没有音乐在放 */
@@ -66,6 +68,13 @@ const api = {
 }
 
 export type IslandApi = typeof api
+
+if (import.meta.env.DEV) {
+  // 开发期专用：伪造一条"正在放的歌"（截图用）。
+  // 走主进程真实的 media:state 广播通道，打包产物里没有这个口子。
+  ;(api.media as unknown as Record<string, unknown>)['devFake'] = (state: unknown): Promise<boolean> =>
+    ipcRenderer.invoke('media:dev-fake', state)
+}
 
 if (process.contextIsolated) {
   contextBridge.exposeInMainWorld('island', api)

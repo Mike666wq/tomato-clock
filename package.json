@@ -1,6 +1,6 @@
 {
   "name": "pomodoro",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "自用 Windows 桌面番茄钟",
   "author": "小M",
   "private": true,

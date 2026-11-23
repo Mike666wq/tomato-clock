@@ -17,14 +17,23 @@ const DEFAULTS: Settings = {
 type Props = {
   /** 界面提示回调（导出成功、改键成功等） */
   onNotice: (text: string) => void
+  /** 要滚到哪一块（灵动岛的「＋ 主题」会把人送到这儿来建主题） */
+  section?: string | null
 }
 
-export function SettingsPage({ onNotice }: Props): React.JSX.Element {
+export function SettingsPage({ onNotice, section }: Props): React.JSX.Element {
   const [settings, setSettings] = useState<Settings>(DEFAULTS)
   const [shortcuts, setShortcuts] = useState<ShortcutDef[]>([])
   const [capturing, setCapturing] = useState<ShortcutDef['id'] | null>(null)
   const [exporting, setExporting] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
+  const topicsRef = useRef<HTMLDivElement>(null)
+
+  // 有人从灵动岛点了「＋ 主题」→ 滚到主题那一块，别让人自己找
+  useEffect(() => {
+    if (section !== 'topics') return
+    topicsRef.current?.scrollIntoView({ block: 'start' })
+  }, [section])
 
   useEffect(() => {
     const api = window.pomodoro
@@ -105,13 +114,15 @@ export function SettingsPage({ onNotice }: Props): React.JSX.Element {
         onNotice={onNotice}
       />
 
-      <TopicManager
-        topics={settings.topics ?? []}
-        activeId={settings.activeTopicId ?? null}
-        onTopics={(topics) => patch({ topics })}
-        onActivate={(id) => patch({ activeTopicId: id })}
-        onNotice={onNotice}
-      />
+      <div ref={topicsRef}>
+        <TopicManager
+          topics={settings.topics ?? []}
+          activeId={settings.activeTopicId ?? null}
+          onTopics={(topics) => patch({ topics })}
+          onActivate={(id) => patch({ activeTopicId: id })}
+          onNotice={onNotice}
+        />
+      </div>
 
       <section className="card">
         <h3 className="card__title">提醒</h3>

@@ -37,6 +37,8 @@ export default function App(): React.JSX.Element {
   const [flash, setFlash] = useState(false)
   const [page, setPage] = useState<PageKey>(initialPage)
   const [settings, setSettings] = useState<Settings | null>(null)
+  /** 主进程让界面滚到某一块（灵动岛的「＋ 主题」） */
+  const [section, setSection] = useState<string | null>(null)
   const noticeTimer = useRef<number | null>(null)
 
   // 主题/深浅写到 html 根元素上（颜色、圆角、字体全在主题文件里）
@@ -77,6 +79,11 @@ export default function App(): React.JSX.Element {
 
     // 主进程让切页（灵动岛右键菜单里的"设置"）
     const offPage = api.nav.onPage((p) => setPage(p))
+    // 主进程让滚到某一块（灵动岛的「＋ 主题」→ 设置页的主题那块）
+    const offSection = api.nav.onSection((s) => {
+      setSection(s)
+      setPage('settings')
+    })
 
     // 主题跟着设置走
     void api.settings.get().then(setSettings)
@@ -88,6 +95,7 @@ export default function App(): React.JSX.Element {
       offClose()
       offFire()
       offPage()
+      offSection()
       offSettings()
     }
   }, [showNotice, showWarn])
@@ -104,9 +112,9 @@ export default function App(): React.JSX.Element {
   return (
     <div className={flash ? 'app app--flash' : 'app'}>
       <TitleBar />
-      {page === 'timer' ? <Timer /> : null}
+      {page === 'timer' ? <Timer onOpenTopics={() => setPage('settings')} /> : null}
       {page === 'stats' ? <Stats /> : null}
-      {page === 'settings' ? <SettingsPage onNotice={showNotice} /> : null}
+      {page === 'settings' ? <SettingsPage onNotice={showNotice} section={section} /> : null}
       <Nav page={page} onChange={setPage} />
       {record ? <RecordCard session={record} onSubmit={submitRecord} onSkip={skipRecord} /> : null}
       {notice ? <Toast notice={notice} onClose={() => setNotice(null)} /> : null}

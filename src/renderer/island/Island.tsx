@@ -355,20 +355,6 @@ export default function Island(): React.JSX.Element {
         </span>
       ) : layer === 'topics' ? (
         <span className="island__opts">
-          <button
-            className={
-              selectedTopicId === null ? 'island__opt island__opt--on' : 'island__opt'
-            }
-            onClick={(e) => {
-              e.stopPropagation()
-              pickTopic(null)
-            }}
-          >
-            未分类
-            {runningTopicId !== selectedTopicId && runningTopicId === null ? (
-              <em className="island__opt-tag">本段</em>
-            ) : null}
-          </button>
           {[...(settings?.topics ?? [])]
             .filter((t) => !t.archived)
             .sort((a, b) => a.order - b.order)
@@ -378,7 +364,8 @@ export default function Island(): React.JSX.Element {
                 className={t.id === selectedTopicId ? 'island__opt island__opt--on' : 'island__opt'}
                 onClick={(e) => {
                   e.stopPropagation()
-                  pickTopic(t.id)
+                  // 再点一次已选中的那个 = 取消选择（不然没有别的办法取消）
+                  pickTopic(t.id === selectedTopicId ? null : t.id)
                 }}
               >
                 <i style={{ background: t.color }} />
@@ -389,6 +376,21 @@ export default function Island(): React.JSX.Element {
                 ) : null}
               </button>
             ))}
+          {/* 没有"未分类"这个选项了 —— 它是数据概念（记录里没挂主题），不是能选的东西。
+              想要一个"还没选"的状态，这里给一条创建入口。 */}
+          <button
+            className="island__opt island__opt--add"
+            onClick={(e) => {
+              e.stopPropagation()
+              window.island?.island.openTopics()
+            }}
+          >
+            ＋ 主题
+          </button>
+          {/* 这一段没挂主题但用户选了别的：说明一下，别让人以为这段也会记到那个主题上 */}
+          {runningTopicId === null && selectedTopicId !== null ? (
+            <em className="island__opt-note">本段没挂主题</em>
+          ) : null}
         </span>
       ) : (
         <span className="island__vals">
@@ -402,9 +404,16 @@ export default function Island(): React.JSX.Element {
             {activePreset ? `${activePreset.name} · ${activePreset.focusMin}/${activePreset.shortMin}` : '未选模板'}
           </button>
           <button
-            className="island__val"
+            className={activeTopic ? 'island__val' : 'island__val island__val--add'}
             onClick={(e) => {
               e.stopPropagation()
+              // 没选主题时，这个位置是**提示可以创建主题**，
+              // 不是"未分类"这个伪选项 ——
+              // "未分类"是数据概念（记录里没挂主题），不是能选的东西。
+              if (!activeTopic) {
+                window.island?.island.openTopics()
+                return
+              }
               setLayer('topics')
             }}
           >
@@ -414,7 +423,7 @@ export default function Island(): React.JSX.Element {
                 {activeTopic.name}
               </>
             ) : (
-              '未分类'
+              '＋ 主题'
             )}
           </button>
           {hint ? <em className="island__hint">{hint}</em> : null}
@@ -424,39 +433,49 @@ export default function Island(): React.JSX.Element {
       {showMusic && media ? (
         <span className="island__music">
           <span className="island__music-note">♪</span>
-          <span className="island__music-text">
-            {media.artist ? `${media.title} - ${media.artist}` : media.title}
+          {/* key 跟着歌名走：换歌时这一段重新挂载，淡入动画重放（120ms，不闪）。
+              歌名和歌手分成两个元素：歌名太长时省略，歌手永远留着 */}
+          <span className="island__music-text" key={`${media.title}|${media.artist}`}>
+            <span className="island__music-title">{media.title}</span>
+            {media.artist ? (
+              <>
+                <span className="island__music-sep">-</span>
+                <span className="island__music-artist">{media.artist}</span>
+              </>
+            ) : null}
           </span>
-          <button
-            className="island__music-btn"
-            onClick={(e) => {
-              e.stopPropagation()
-              window.island?.media.command('prev')
-            }}
-            aria-label="上一首"
-          >
-            <PrevIcon />
-          </button>
-          <button
-            className="island__music-btn"
-            onClick={(e) => {
-              e.stopPropagation()
-              window.island?.media.command(media.playing ? 'pause' : 'play')
-            }}
-            aria-label={media.playing ? '暂停' : '播放'}
-          >
-            {media.playing ? <PauseIcon /> : <PlayIcon />}
-          </button>
-          <button
-            className="island__music-btn"
-            onClick={(e) => {
-              e.stopPropagation()
-              window.island?.media.command('next')
-            }}
-            aria-label="下一首"
-          >
-            <NextIcon />
-          </button>
+          <span className="island__music-actions">
+            <button
+              className="island__music-btn"
+              onClick={(e) => {
+                e.stopPropagation()
+                window.island?.media.command('prev')
+              }}
+              aria-label="上一首"
+            >
+              <PrevIcon size={16} />
+            </button>
+            <button
+              className="island__music-btn"
+              onClick={(e) => {
+                e.stopPropagation()
+                window.island?.media.command(media.playing ? 'pause' : 'play')
+              }}
+              aria-label={media.playing ? '暂停' : '播放'}
+            >
+              {media.playing ? <PauseIcon size={16} /> : <PlayIcon size={16} />}
+            </button>
+            <button
+              className="island__music-btn"
+              onClick={(e) => {
+                e.stopPropagation()
+                window.island?.media.command('next')
+              }}
+              aria-label="下一首"
+            >
+              <NextIcon size={16} />
+            </button>
+          </span>
         </span>
       ) : null}
 

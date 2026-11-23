@@ -346,7 +346,32 @@ html[data-paused='1'] .island__clock {
   opacity: 0.8;
 }
 
-/* ---- 音乐控制行（v0.2.2） ----
+/* 说明：这一段没挂主题但用户选了别的。只说明，不给可点的伪选项 */
+.island__opt-note {
+  font-style: normal;
+  font-size: 9px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+/* 「＋ 主题」：不是选项，是"这里可以建一个"的入口。
+   虚线描边 + --ink-3，比正常胶囊窄一点 —— 它是提示，不该抢戏 */
+.island__val--add,
+.island__opt--add {
+  color: var(--ink-3);
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--ink-3) 55%, transparent);
+  padding: 0 8px;
+}
+
+.island__val--add:hover,
+.island__opt--add:hover {
+  color: var(--ink-2);
+  border-color: var(--ink-2);
+  background: transparent;
+}
+
+/* ---- 音乐控制行（v0.2.2，v0.6 重做） ----
    展开态最下面一行：♪ 歌名 - 歌手 + 上一首/播放暂停/下一首。
    收起态不显示这一行。歌名太长就截断加省略号，不能撑破胶囊。 */
 
@@ -363,18 +388,59 @@ html[data-paused='1'] .island__clock {
 
 .island__music-note {
   flex: none;
-  font-size: var(--fs-tiny);
-  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1;
+  color: var(--ink-3);
 }
 
+/* 歌名和歌手分成两个元素：
+   歌名可以截断，歌手必须留着 —— 一整段 text-overflow 会把歌手吃掉，
+   而"谁唱的"往往比歌名更重要。 */
 .island__music-text {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: var(--fs-tiny);
-  color: var(--ink-2);
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  /* 换歌时淡入 120ms：key 变了这一段会重新挂载，动画跟着重放 */
+  animation: island-music-in 120ms ease-out;
+}
+
+@keyframes island-music-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.island__music-title {
+  min-width: 0;
+  font-size: 13px;
+  color: var(--ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.island__music-sep {
+  flex: none;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.island__music-artist {
+  flex: none;
+  font-size: 12px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.island__music-actions {
+  flex: none;
+  display: flex;
+  gap: 4px;
 }
 
 .island__music-btn {
