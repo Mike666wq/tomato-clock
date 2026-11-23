@@ -38,8 +38,7 @@ const api = {
     focus: (): void => ipcRenderer.send('island:focus'),
     /** 打开主窗口的主题分区（灵动岛的「＋ 主题」就是它） */
     openTopics: (): void => ipcRenderer.send('island:open-topics')
-  },
-  media: {
+  },  media: {
     /** 当前在放什么；null = 没有音乐在放 */
     getState: (): Promise<MediaSnapshot | null> => ipcRenderer.invoke('media:get-state'),
     /** 发控制命令 */
@@ -78,6 +77,13 @@ if (import.meta.env.DEV) {
   // 走主进程真实的 media:state 广播通道，打包产物里没有这个口子。
   ;(api.media as unknown as Record<string, unknown>)['devFake'] = (state: unknown): Promise<boolean> =>
     ipcRenderer.invoke('media:dev-fake', state)
+  // 开发期专用：岛的窗口屏幕坐标（真机鼠标验证要换算屏幕坐标）
+  ;(api.island as unknown as Record<string, unknown>)['devBounds'] = (): Promise<{
+    x: number
+    y: number
+    width: number
+    height: number
+  } | null> => ipcRenderer.invoke('island:dev-bounds')
 }
 
 if (process.contextIsolated) {

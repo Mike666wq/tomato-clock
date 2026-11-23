@@ -381,6 +381,30 @@ await sleep(3200)
 const stillOpen = await evaluate(island, `!!document.querySelector('.island__vol')`)
 check('3 秒不动后滑条自动收起', stillOpen === false, `滑条还在=${stillOpen}`)
 
+// ---- 外部按音量键 → 滑条要跟手（规格里的验收点） ----
+// 用真实的 VK_VOLUME_UP（0xAF）打一发：Windows 每格 2%。
+// 这条验的是"系统音量被外部改了 → 我们的音量读数跟着变"。
+function pressVolumeKey(vk) {
+  const ps = `
+Add-Type -TypeDefinition 'using System;using System.Runtime.InteropServices;public class VKey{[DllImport("user32.dll")]public static extern void keybd_event(byte bVk,byte bScan,uint dwFlags,UIntPtr dwExtraInfo);}'
+[VKey]::keybd_event(${vk},0,0,[UIntPtr]::Zero)
+Start-Sleep -Milliseconds 40
+[VKey]::keybd_event(${vk},0,2,[UIntPtr]::Zero)
+`
+  execFileSync('powershell', ['-NoProfile', '-Command', ps], { encoding: 'utf-8' })
+}
+const beforeKey = await uiVolume()
+pressVolumeKey(0xaf) // VK_VOLUME_UP
+await sleep(900)
+const afterKey = await uiVolume()
+check(
+  '外部按音量键 → 音量读数跟着变（+2）',
+  afterKey !== null && beforeKey !== null && afterKey === beforeKey + 2,
+  `音量 ${beforeKey} → ${afterKey}（期望 +2）`
+)
+pressVolumeKey(0xae) // VK_VOLUME_DOWN：恢复原值
+await sleep(600)
+
 // ---- 恢复音量（走同一条链路写回去，再用读回确认） ----
 await evaluate(island, `window.island?.media?.setVolume?.(${originalVolume ?? 25})`)
 await sleep(1000)

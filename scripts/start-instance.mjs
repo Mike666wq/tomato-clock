@@ -128,6 +128,30 @@ if (!ready) {
 }
 
 // ---- 4. 写清单 ----
+// 记下**这次启动的进程 PID**：收尾时只杀这几个，
+// 不许按名字/路径批量停（那会误伤用户自己装的那份）。
+function listPids(pattern) {
+  try {
+    const out = execFileSync(
+      'powershell',
+      [
+        '-NoProfile',
+        '-Command',
+        `$pat = $env:POMO_EXE_PATTERN
+         (Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+           Where-Object { $_.ExecutablePath -like $pat } |
+           ForEach-Object { $_.ProcessId }) -join ','`
+      ],
+      { encoding: 'utf-8', env: { ...process.env, POMO_EXE_PATTERN: pattern } }
+    ).trim()
+    return out ? out.split(',').map((s) => Number(s.trim())).filter((n) => Number.isFinite(n)) : []
+  } catch {
+    return []
+  }
+}
+
+const startedPids = listPids(exePattern)
+
 const manifest = {
   mode,
   port,
@@ -137,6 +161,7 @@ const manifest = {
   snapshotFile: path.join(profile, 'running.json'),
   exePath,
   exePattern,
+  pids: startedPids,
   pid: child.pid,
   startedAt: new Date().toISOString()
 }

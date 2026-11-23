@@ -701,6 +701,18 @@ if (!app.requestSingleInstanceLock()) {
       win.webContents.focus()
     })
 
+    // 开发期：灵动岛窗口的屏幕坐标。
+    // 真机鼠标验证要用它换算屏幕坐标（SetCursorPos 用的是屏幕坐标，
+    // 而 DOM 的 getBoundingClientRect 是窗口内的视口坐标）。
+    // 打包产物里没有这个口子。
+    if (import.meta.env.DEV) {
+      ipcMain.handle('island:dev-bounds', () => {
+        const win = island?.win
+        if (!win || win.isDestroyed()) return null
+        return win.getBounds()
+      })
+    }
+
     // 音乐控制（v0.2.2）：状态从 SMTC 子进程来，命令也是发给它
     ipcMain.handle('media:get-state', () => music?.getState() ?? null)
     ipcMain.on('media:command', (_e, cmd: MediaCommand) => music?.command(cmd))
