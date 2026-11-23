@@ -697,6 +697,11 @@ if (!app.requestSingleInstanceLock()) {
     // 音乐控制（v0.2.2）：状态从 SMTC 子进程来，命令也是发给它
     ipcMain.handle('media:get-state', () => music?.getState() ?? null)
     ipcMain.on('media:command', (_e, cmd: MediaCommand) => music?.command(cmd))
+    // 系统主音量（灵动岛的音量滑条）：跟键盘音量键同一个数
+    ipcMain.handle('media:get-volume', () => music?.getVolume() ?? null)
+    ipcMain.on('media:set-volume', (_e, percent: number) => {
+      if (typeof percent === 'number') music?.setVolume(percent)
+    })
 
     registerAllShortcuts()
 

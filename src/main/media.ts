@@ -22,6 +22,14 @@ import type { MediaSnapshot } from '../shared/types'
 
 export type MediaCommand = 'play' | 'pause' | 'next' | 'prev'
 
+/**
+ * 等真实状态回流的超时。
+ *
+ * 命令发出去之后，界面先进入过渡态（pending），
+ * 真实状态回来就改图标；这么久还没回来就恢复原样。
+ */
+const PENDING_TIMEOUT_MS = 400
+
 export type MusicController = {
   /** 打开：启动子进程并开始轮询 */
   enable(): void
@@ -32,6 +40,10 @@ export type MusicController = {
   getState(): MediaSnapshot | null
   /** 发控制命令 */
   command(cmd: MediaCommand): void
+  /** 当前系统主音量（0-100）；null = 拿不到 */
+  getVolume(): number | null
+  /** 设系统主音量（0-100）；**界面会立刻本地更新**，不等子进程回读 */
+  setVolume(percent: number): void
   dispose(): void
 }
 
@@ -69,6 +81,7 @@ export function createMusicController(onChange: (state: MediaSnapshot | null) =>
   let restarts = 0
   let restartTimer: NodeJS.Timeout | null = null
   let buffer = ''
+  let pendingTimer: NodeJS.Timeout | null = null
 
   const setState = (next: MediaSnapshot | null): void => {
     const same =
@@ -77,10 +90,21 @@ export function createMusicController(onChange: (state: MediaSnapshot | null) =>
       state.title === next.title &&
       state.artist === next.artist &&
       state.playing === next.playing &&
-      state.source === next.source
+      state.source === next.source &&
+      state.volume === next.volume &&
+      state.volumeOk === next.volumeOk &&
+      state.pending === next.pending
     if (same) return
     state = next
     onChange(next)
+  }
+
+  /** 清掉"等真实状态回流"的过渡态 */
+  const clearPending = (): void => {
+    if (pendingTimer) {
+      clearTimeout(pendingTimer)
+      pendingTimer = null
+    }
   }
 
   const stop = (): void => {
@@ -88,6 +112,7 @@ export function createMusicController(onChange: (state: MediaSnapshot | null) =>
       clearTimeout(restartTimer)
       restartTimer = null
     }
+    clearPending()
     if (child) {
       const c = child
       child = null
@@ -173,21 +198,51 @@ export function createMusicController(onChange: (state: MediaSnapshot | null) =>
       const artist = String(parsed['artist'] ?? '')
       const source = String(parsed['source'] ?? '')
       const playing = Boolean(parsed['playing'])
+      const volume = Number(parsed['volume'] ?? 0)
+      const volumeOk = Boolean(parsed['volumeOk'])
+      // 真实状态回来了 → 过渡态结束
+      clearPending()
       if (!title && !artist) {
         // 没有媒体在放：整行藏掉
         setState(null)
       } else {
-        setState({ source, title, artist, playing })
+        setState({ source, title, artist, playing, volume, volumeOk, pending: '' })
       }
       return
     }
+    if (kind === 'volume') {
+      // 音量变了（外部按了音量键，或我们自己设的）
+      const ok = Boolean(parsed['ok'])
+      const value = Number(parsed['value'] ?? 0)
+      if (!state) return
+      setState({ ...state, volume: value, volumeOk: ok })
+      return
+    }
     if (kind === 'ack') {
-      // 命令回执：ok 就乐观更新播放状态，让按钮立刻反应
       const cmd = String(parsed['command'] ?? '')
       const ok = Boolean(parsed['ok'])
-      if (!ok) return
-      if (cmd === 'play' && state) setState({ ...state, playing: true })
-      if (cmd === 'pause' && state) setState({ ...state, playing: false })
+      if (cmd === 'vol') {
+        // 音量命令的回执：音量值由 kind=volume 那条带
+        return
+      }
+      if (!state) return
+      if (!ok) {
+        // 命令**没生效**（helper 试过了，SMTC 和媒体键都没能让它动）
+        // → 直接恢复原样，不假装点过了
+        clearPending()
+        setState({ ...state, pending: '' })
+        return
+      }
+      // ⚠ **不做乐观更新**：以前收到 ok 就把按钮切成"暂停"，
+      //   结果是"看起来点了、其实音乐没停"（QQ 音乐只肯读不肯收）。
+      //   现在只进入过渡态，等**真实状态**回流才改图标。
+      setState({ ...state, pending: cmd })
+      clearPending()
+      pendingTimer = setTimeout(() => {
+        pendingTimer = null
+        if (state && state.pending === cmd) setState({ ...state, pending: '' })
+      }, PENDING_TIMEOUT_MS)
+      return
     }
   }
 
@@ -211,6 +266,21 @@ export function createMusicController(onChange: (state: MediaSnapshot | null) =>
         child.stdin.write(`${cmd}\n`)
       } catch (err) {
         log.warn(`发音乐命令失败: ${(err as Error).message}`)
+      }
+    },
+    getVolume(): number | null {
+      if (!state || !state.volumeOk) return null
+      return state.volume
+    },
+    setVolume(percent: number): void {
+      const v = Math.max(0, Math.min(100, Math.round(percent)))
+      // **界面先本地更新**：拖滑条时要跟手，不能等子进程回读
+      if (state) setState({ ...state, volume: v })
+      if (!child || !child.stdin || child.stdin.destroyed) return
+      try {
+        child.stdin.write(`vol ${v}\n`)
+      } catch (err) {
+        log.warn(`设音量失败: ${(err as Error).message}`)
       }
     },
     dispose(): void {

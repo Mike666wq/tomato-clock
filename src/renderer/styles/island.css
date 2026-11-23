@@ -483,3 +483,63 @@ html[data-paused='1'] .island__clock {
 .island__music-btn:active {
   background: var(--active);
 }
+
+/* ---- 音量滑条（v0.3.6） ----
+   点喇叭图标 → 歌名区换成滑条（**行高不变**，所以岛的高度不用动）。
+   规格：轨道 4px、拇指 12px；拖动节流 50ms，松手落最终值；
+   拖完 3 秒不动或点到岛外自动收起。 */
+
+/* 滑条占的是"歌名区"那个位置，所以 flex 规则跟 .island__music-text 一致 */
+.island__vol {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  height: var(--island-music-h);
+  padding: 0 2px;
+  cursor: pointer;
+  /* 岛整体是个"点一下就切计时"的大开关 —— 滑条必须自己拦住点击。
+     no-drag 是防以后给岛加拖动区域时滑条变成拖窗口用的。 */
+  -webkit-app-region: no-drag;
+}
+
+.island__vol-track {
+  position: relative;
+  width: 100%;
+  height: var(--island-vol-track);
+  border-radius: var(--r-pill);
+  background: var(--island-vol-track);
+}
+
+.island__vol-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: inherit;
+  background: var(--island-vol-fill);
+}
+
+/* 拇指：跟着音量走，用 left 百分比定位；
+   负的 margin-left 让它**以中心对齐轨道端点**，不然会偏出去半个。 */
+.island__vol-thumb {
+  position: absolute;
+  top: 50%;
+  width: var(--island-vol-thumb);
+  height: var(--island-vol-thumb);
+  margin-left: calc(var(--island-vol-thumb) / -2);
+  transform: translateY(-50%);
+  border-radius: 50%;
+  background: var(--island-vol-thumb);
+}
+
+/* 过渡态：**等真实状态回流**才换图标（以前乐观更新，看着像点动了其实没动） */
+.island__music-btn[data-pending='1'] {
+  opacity: 0.45;
+}
+
+/* 音量按钮开着的时候有个底色，让人知道滑条是它切出来的 */
+.island__music-btn[data-on='1'] {
+  background: var(--hover);
+  color: var(--ink);
+}

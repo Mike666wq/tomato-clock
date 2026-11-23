@@ -59,4 +59,8 @@
   --island-music-h: 42px;
   --island-music-gap: 6px;
   --island-music-btn: 28px;
+  /* 音量滑条（v0.3.6）：轨道 4px、拇指 12px。
+     尺寸与主题无关，放这里；颜色去 themes/*.css 的 --island-vol-*。 */
+  --island-vol-track: 4px;
+  --island-vol-thumb: 12px;
 }

@@ -110,6 +110,20 @@ export type MediaSnapshot = {
   title: string
   artist: string
   playing: boolean
+  /** 系统主音量 0-100（跟键盘音量键同一个数） */
+  volume: number
+  /** 这台机器上能不能拿到音量；false = 隐藏音量入口，不显示一个假的 0 */
+  volumeOk: boolean
+  /**
+   * 正在等真实状态回流的命令（play/pause/next/prev）。
+   * 空 = 没有待确认的动作。
+   *
+   * 为什么要有它：**不做乐观更新**。QQ 音乐只肯读 SMTC、不肯收控制，
+   * 收到 ok 就把按钮切成"暂停"，看着像点动了，其实音乐没停。
+   * 现在改成：点了先进入过渡态，等**真实状态**回流才改图标；
+   * 400ms 还没回来就恢复原样。
+   */
+  pending: string
 }
 
 /** 一条专注记录 */

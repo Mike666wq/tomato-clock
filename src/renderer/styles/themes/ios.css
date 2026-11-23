@@ -34,6 +34,12 @@
      同一档值在两档里都够（实测浅色档 3.4:1、深色档 4.1:1）。 */
   --dashed-edge: color-mix(in srgb, var(--ink) 45%, transparent);
 
+  /* ---------- 音量滑条（v0.3.6） ----------
+     系统感的深色档：轨道是灰，填充跟文字同色，拇指是白的。 */
+  --island-vol-track: rgba(120, 120, 128, 0.32);
+  --island-vol-fill: color-mix(in srgb, var(--ink) 72%, transparent);
+  --island-vol-thumb: #ffffff;
+
   /* ---------- 形状：大圆角 ---------- */
   --r-sm: 10px;
   --r-md: 14px;
@@ -83,6 +89,11 @@
   --hover: rgba(120, 120, 128, 0.12);
   --active: rgba(120, 120, 128, 0.2);
   --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.08);
+
+  /* 音量滑条（v0.3.6）浅色档：--ink 是黑的，填充跟文字同色 */
+  --island-vol-track: rgba(120, 120, 128, 0.22);
+  --island-vol-fill: color-mix(in srgb, var(--ink) 72%, transparent);
+  --island-vol-thumb: #ffffff;
 
   /* ---------- 灵动岛：浅色下跟卡片一样是白的 ---------- */
   --island-bg: rgba(255, 255, 255, 0.94);

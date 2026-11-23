@@ -38,6 +38,12 @@
      之前拿 --ink-2 混只有 2.73:1，看不清框在哪。 */
   --dashed-edge: color-mix(in srgb, var(--ink) 45%, transparent);
 
+  /* ---------- 音量滑条（v0.3.6） ----------
+     霓虹是深底 + 光：填充用主题强调色，拇指带一点辉光。 */
+  --island-vol-track: rgba(255, 255, 255, 0.12);
+  --island-vol-fill: var(--accent);
+  --island-vol-thumb: #ffffff;
+
   /* ---------- 形状：玻璃胶囊 ---------- */
   --r-sm: 12px;
   --r-md: 16px;

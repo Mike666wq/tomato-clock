@@ -51,6 +51,13 @@
      实测 3.3:1，够看清"这里有个框"。 */
   --dashed-edge: color-mix(in srgb, var(--ink) 45%, var(--line));
 
+  /* ---------- 音量滑条（v0.3.6） ----------
+     轨道是"没放进去的部分"，填充是"已经放进去的部分"。
+     纸感是墨色语言：轨道用极淡墨，填充用墨色，拇指用实心墨。 */
+  --island-vol-track: color-mix(in srgb, var(--ink) 14%, transparent);
+  --island-vol-fill: color-mix(in srgb, var(--ink) 62%, transparent);
+  --island-vol-thumb: var(--ink);
+
   /* ---------- 形状：几乎无圆角 ---------- */
   --r-sm: 2px;
   --r-md: 2px;

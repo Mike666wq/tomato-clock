@@ -14,12 +14,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { MediaSnapshot, Settings, TimerState } from '../../shared/types'
 import { resolveUiTheme } from '../../shared/types'
-import { NextIcon, OpenIcon, PauseIcon, PlayIcon, PrevIcon, SkipIcon } from './Icons'
+import { NextIcon, OpenIcon, PauseIcon, PlayIcon, PrevIcon, SkipIcon, VolumeIcon } from './Icons'
 
 /** 悬停多久展开 */
 const HOVER_OPEN_MS = 120
 /** 离开多久收起 */
 const HOVER_CLOSE_MS = 400
+/** 音量滑条：多久不动自动收起 */
+const VOL_HIDE_MS = 3000
+/** 拖动时节流间隔（松手必须落最终值） */
+const VOL_THROTTLE_MS = 50
+/** 滚轮一格 ±5% */
+const VOL_WHEEL_STEP = 5
 
 /** 展开态第二层显示什么 */
 type Layer = 'idle' | 'presets' | 'topics'
@@ -43,6 +49,16 @@ export default function Island(): React.JSX.Element {
   const [media, setMedia] = useState<MediaSnapshot | null>(null)
   const openTimer = useRef<number | null>(null)
   const closeTimer = useRef<number | null>(null)
+
+  // ---- 系统音量滑条 ----
+  // 滑条在**音乐行里**：点喇叭图标把歌名区换成滑条（行高不变）。
+  // 拖动时本地先动（跟手），音量值由主进程立刻写回系统。
+  const [volOpen, setVolOpen] = useState(false)
+  const [volLocal, setVolLocal] = useState<number | null>(null)
+  const volTrackRef = useRef<HTMLSpanElement | null>(null)
+  const volHideTimer = useRef<number | null>(null)
+  const volLastSent = useRef(0)
+  const volDragging = useRef(false)
 
   useEffect(() => {
     const api = window.island
@@ -204,6 +220,107 @@ export default function Island(): React.JSX.Element {
   }
 
   const remaining = state ? state.remainingSec : 0
+
+  // ---- 音量滑条的行为 ----
+  /** 拖动中的本地值（跟手）；不拖时用主进程给的真实值 */
+  const volPercent = volLocal ?? (media?.volume ?? 0)
+
+  const scheduleVolHide = useCallback((delay = VOL_HIDE_MS) => {
+    if (volHideTimer.current) window.clearTimeout(volHideTimer.current)
+    volHideTimer.current = window.setTimeout(() => {
+      volHideTimer.current = null
+      setVolOpen(false)
+      setVolLocal(null)
+    }, delay)
+  }, [])
+
+  /** 指针位置 → 0-100 */
+  const volFromEvent = useCallback((clientX: number): number => {
+    const el = volTrackRef.current
+    if (!el) return 0
+    const r = el.getBoundingClientRect()
+    if (r.width <= 0) return 0
+    const p = (clientX - r.left) / r.width
+    return Math.max(0, Math.min(100, Math.round(p * 100)))
+  }, [])
+
+  /** 发音量：拖动中节流 50ms，force=true 时无条件发（松手落最终值） */
+  const sendVolume = useCallback((value: number, force: boolean) => {
+    const now = Date.now()
+    if (!force && now - volLastSent.current < VOL_THROTTLE_MS) return
+    volLastSent.current = now
+    window.island?.media.setVolume(value)
+  }, [])
+
+  const onVolPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLSpanElement>) => {
+      // 岛整体是"点一下就切计时"的大开关，滑条必须自己拦住
+      e.stopPropagation()
+      volDragging.current = true
+      const v = volFromEvent(e.clientX)
+      setVolLocal(v)
+      sendVolume(v, true)
+      scheduleVolHide()
+    },
+    [volFromEvent, sendVolume, scheduleVolHide]
+  )
+
+  const onVolPointerMove = useCallback(
+    (e: React.PointerEvent<HTMLSpanElement>) => {
+      if (!volDragging.current) return
+      e.stopPropagation()
+      const v = volFromEvent(e.clientX)
+      setVolLocal(v)
+      sendVolume(v, false)
+      scheduleVolHide()
+    },
+    [volFromEvent, sendVolume, scheduleVolHide]
+  )
+
+  const onVolPointerUp = useCallback(
+    (e: React.PointerEvent<HTMLSpanElement>) => {
+      if (!volDragging.current) return
+      e.stopPropagation()
+      volDragging.current = false
+      // ⚠ **松手必须落最终值**：节流期间最后那一下可能没发出去，
+      //   不落最终值的话音量会停在拖动途中的某个数上。
+      const v = volFromEvent(e.clientX)
+      setVolLocal(null)
+      sendVolume(v, true)
+      scheduleVolHide()
+    },
+    [volFromEvent, sendVolume, scheduleVolHide]
+  )
+
+  /** 滚轮 ±5% */
+  const onVolWheel = useCallback(
+    (e: React.WheelEvent<HTMLSpanElement>) => {
+      e.stopPropagation()
+      e.preventDefault()
+      const next = Math.max(
+        0,
+        Math.min(100, volPercent + (e.deltaY < 0 ? VOL_WHEEL_STEP : -VOL_WHEEL_STEP))
+      )
+      setVolLocal(null)
+      window.island?.media.setVolume(next)
+      scheduleVolHide()
+    },
+    [volPercent, scheduleVolHide]
+  )
+
+  /** 点喇叭：展开/收起滑条 */
+  const toggleVol = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>) => {
+      e.stopPropagation()
+      setVolLocal(null)
+      setVolOpen((v) => {
+        if (!v) scheduleVolHide()
+        return !v
+      })
+    },
+    [scheduleVolHide]
+  )
+
   /** 只有专注段能写任务名（D3） */
   const isFocus = (state?.phase ?? 'focus') === 'focus'
   const running = state?.running ?? false
@@ -255,6 +372,13 @@ export default function Island(): React.JSX.Element {
         // 正在写任务名时点空白 = 结束编辑并提交，别顺手把计时也切了
         if (editingTask) {
           commitTask()
+          return
+        }
+        // 音量滑条开着的时候，点岛的其他地方 = **收起滑条**，
+        // 不能顺手把计时也切了（那是"点到岛外自动收起"那条规格）
+        if (volOpen) {
+          setVolOpen(false)
+          setVolLocal(null)
           return
         }
         if (layer !== 'idle') setLayer('idle')
@@ -433,15 +557,31 @@ export default function Island(): React.JSX.Element {
       {showMusic && media ? (
         <span className="island__music">
           <span className="island__music-note">♪</span>
-          {/* key 跟着歌名走：换歌时这一段重新挂载，淡入动画重放（120ms，不闪）。
-              歌名和歌手分成两个元素：**歌名左对齐、歌手右对齐**，中间留白。
-              以前是「歌名 - 歌手」拼在一段文字里，长歌名截断后省略号后面紧跟一个
-              " - "，读起来像省略号里还藏了半句话。
-              分成两块之后，歌手那一块永远不会被歌名的省略号污染。 */}
-          <span className="island__music-text" key={`${media.title}|${media.artist}`}>
-            <span className="island__music-title">{media.title}</span>
-            {media.artist ? <span className="island__music-artist">{media.artist}</span> : null}
-          </span>
+          {/* 歌名区 / 音量滑条 **同一个位置**二选一：行高不变 */}
+          {volOpen ? (
+            <span
+              className="island__vol"
+              onPointerDown={onVolPointerDown}
+              onPointerMove={onVolPointerMove}
+              onPointerUp={onVolPointerUp}
+              onWheel={onVolWheel}
+              role="slider"
+              aria-label="系统音量"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={volPercent}
+            >
+              <span className="island__vol-track" ref={volTrackRef}>
+                <i className="island__vol-fill" style={{ width: `${volPercent}%` }} />
+                <i className="island__vol-thumb" style={{ left: `${volPercent}%` }} />
+              </span>
+            </span>
+          ) : (
+            <span className="island__music-text" key={`${media.title}|${media.artist}`}>
+              <span className="island__music-title">{media.title}</span>
+              {media.artist ? <span className="island__music-artist">{media.artist}</span> : null}
+            </span>
+          )}
           <span className="island__music-actions">
             <button
               className="island__music-btn"
@@ -460,6 +600,9 @@ export default function Island(): React.JSX.Element {
                 window.island?.media.command(media.playing ? 'pause' : 'play')
               }}
               aria-label={media.playing ? '暂停' : '播放'}
+              // 过渡态：**等真实状态回流**才换图标（以前是乐观更新，
+              // 看着像点动了其实音乐没停）
+              data-pending={media.pending ? '1' : undefined}
             >
               {media.playing ? <PauseIcon size={16} /> : <PlayIcon size={16} />}
             </button>
@@ -473,6 +616,17 @@ export default function Island(): React.JSX.Element {
             >
               <NextIcon size={16} />
             </button>
+            {/* 音量入口：拿不到音量就**整个隐藏**，不许显示一个假的 0 */}
+            {media.volumeOk ? (
+              <button
+                className="island__music-btn"
+                onClick={toggleVol}
+                aria-label="音量"
+                data-on={volOpen ? '1' : undefined}
+              >
+                <VolumeIcon size={16} muted={volPercent === 0} />
+              </button>
+            ) : null}
           </span>
         </span>
       ) : null}

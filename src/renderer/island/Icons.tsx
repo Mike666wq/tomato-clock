@@ -76,3 +76,27 @@ export function NextIcon({ className, size = 14 }: IconProps): React.JSX.Element
     </svg>
   )
 }
+
+/**
+ * 音量喇叭（系统总音量）。
+ * muted=true 时画一条斜杠，表示当前是 0。
+ */
+export function VolumeIcon({
+  className,
+  size = 14,
+  muted = false
+}: IconProps & { muted?: boolean }): React.JSX.Element {
+  return (
+    <svg {...base(size)} className={className} aria-hidden>
+      <path d="M2.6 5.4h1.8L7 3.2v7.6L4.4 8.6H2.6Z" fill="currentColor" stroke="none" />
+      {muted ? (
+        <path d="M9 5.6l3 2.8M12 5.6l-3 2.8" />
+      ) : (
+        <>
+          <path d="M9.1 5.4a3 3 0 0 1 0 3.2" />
+          <path d="M10.9 4a5.2 5.2 0 0 1 0 6" />
+        </>
+      )}
+    </svg>
+  )
+}

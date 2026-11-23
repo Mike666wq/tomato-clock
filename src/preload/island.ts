@@ -44,6 +44,10 @@ const api = {
     getState: (): Promise<MediaSnapshot | null> => ipcRenderer.invoke('media:get-state'),
     /** 发控制命令 */
     command: (cmd: 'play' | 'pause' | 'next' | 'prev'): void => ipcRenderer.send('media:command', cmd),
+    /** 当前系统主音量（0-100）；null = 拿不到音量（界面据此隐藏音量入口） */
+    getVolume: (): Promise<number | null> => ipcRenderer.invoke('media:get-volume'),
+    /** 设系统主音量（0-100）；主进程会立刻本地更新，界面不用等 */
+    setVolume: (percent: number): void => ipcRenderer.send('media:set-volume', percent),
     onState: (cb: (s: MediaSnapshot | null) => void): (() => void) => {
       const listener = (_e: unknown, s: MediaSnapshot | null): void => cb(s)
       ipcRenderer.on('media:state', listener)
