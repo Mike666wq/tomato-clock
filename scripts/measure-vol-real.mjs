@@ -13,6 +13,10 @@
 
 import { spawn } from 'node:child_process'
 import path from 'node:path'
+import { assertNotLocked } from './preflight.mjs'
+
+// 屏幕锁着就别做真机输入验证（事件全被锁屏遮罩吃掉，测出来是假的）
+assertNotLocked()
 
 const port = process.env.CDP_PORT ?? '9222'
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -119,6 +123,18 @@ if (!bounds) {
   process.exit(1)
 }
 
+/**
+ * ⚠ **缩放系数**：Electron 的 getBounds() 和 DOM 的 getBoundingClientRect()
+ * 给的都是 **DIP**（设备无关像素，跟 CSS px 一致），
+ * 而 SetCursorPos / WindowFromPoint 用的是**物理像素**。
+ * 这台机器是 150% 缩放 → 差 1.5 倍。
+ *
+ * 不乘这个系数，鼠标就落在屏幕的别处，事件根本到不了岛上
+ * （一度以为是 explorer 的全屏层挡着，其实是我坐标算错了）。
+ */
+const dpr = Number(await evaluate(island, `window.devicePixelRatio`)) || 1
+console.log(`  [诊断] devicePixelRatio=${dpr}`)
+
 // 准备：打开音乐行（开发期假状态）+ 展开岛 + 打开滑条
 await evaluate(
   island,
@@ -141,7 +157,10 @@ await sleep(600)
 await mouse('move 5 5')
 await sleep(200)
 const pos1 = await mouse('get 0 0')
-const islandCenter = { x: Math.round(bounds.x + bounds.width / 2), y: Math.round(bounds.y + 12) }
+const islandCenter = {
+  x: Math.round((bounds.x + bounds.width / 2) * dpr),
+  y: Math.round((bounds.y + 12) * dpr)
+}
 await mouse(`move ${islandCenter.x} ${islandCenter.y}`)
 await sleep(600)
 const pos2 = await mouse('get 0 0')
@@ -196,9 +215,10 @@ async function screenPoint(selector, ratio) {
     })()`
   )
   if (!rect) return null
+  // DIP → 物理像素（见上面的 dpr 说明）
   return {
-    x: Math.round(bounds.x + rect.x + rect.w * ratio),
-    y: Math.round(bounds.y + rect.y + rect.h / 2)
+    x: Math.round((bounds.x + rect.x + rect.w * ratio) * dpr),
+    y: Math.round((bounds.y + rect.y + rect.h / 2) * dpr)
   }
 }
 
@@ -217,7 +237,10 @@ if (!volBtn) {
   console.log('NO_VOLUME_BUTTON')
   process.exit(1)
 }
-const btnScreen = { x: Math.round(bounds.x + volBtn.x), y: Math.round(bounds.y + volBtn.y) }
+const btnScreen = {
+  x: Math.round((bounds.x + volBtn.x) * dpr),
+  y: Math.round((bounds.y + volBtn.y) * dpr)
+}
 await mouse('move 5 5')
 await sleep(200)
 await mouse(`move ${btnScreen.x} ${btnScreen.y}`)

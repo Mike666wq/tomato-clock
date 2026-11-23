@@ -16,8 +16,44 @@
 //      exe 被当成 node 跑（node 的 bad option 退出码正好是 9）。
 //   ③ 按命令行片段筛进程，把 DS Bot 自己的 runner 也匹配进去，自杀了一条命令。
 
+import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
+
+/**
+ * 屏幕锁着的时候，**真机鼠标验证根本不可能成功**。
+ *
+ * 锁屏时 Windows 有一个全屏置顶的 `LockScreenBackstopFrame` 挡在所有窗口前面，
+ * 鼠标事件全被它吃掉 —— 岛收不到 hover、按钮点不到。
+ * 看起来像"产品坏了"，其实是被锁屏挡住了。
+ *
+ * 检查方式：`LogonUI` 进程在跑 = 锁屏界面开着。
+ * （肥鱼查出来的：2026-11-24 凌晨那轮真机验证就是这么白跑的。）
+ */
+export function assertNotLocked() {
+  let state = ''
+  try {
+    state = execFileSync(
+      'powershell',
+      [
+        '-NoProfile',
+        '-Command',
+        "if (Get-Process LogonUI -ErrorAction SilentlyContinue) { 'LOCKED' } else { 'UNLOCKED' }"
+      ],
+      { encoding: 'utf-8' }
+    ).trim()
+  } catch {
+    // 查不到就当没锁：宁可跑一次看结果，也别把验证直接挡掉
+    return
+  }
+  if (state === 'LOCKED') {
+    console.error('\n[自检不通过] 屏幕锁着 —— 真机鼠标验证做不了')
+    console.error('  锁屏时有一个全屏遮罩（LockScreenBackstopFrame）挡在所有窗口前面，')
+    console.error('  鼠标事件全被它吃掉：岛收不到 hover、按钮点不到。')
+    console.error('  这不是产品的问题。解锁后再跑。\n')
+    process.exit(1)
+  }
+}
 
 /** 实例清单：start-instance.mjs 写的，preflight 读它 */
 export const INSTANCE_FILE = path.join('.tmp', 'instance.json')

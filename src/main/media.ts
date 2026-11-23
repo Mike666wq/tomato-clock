@@ -190,12 +190,22 @@ export function createMusicController(onChange: (state: MediaSnapshot | null) =>
       setState(null)
       if (!enabled) return
       restarts += 1
+      // ⚠ **退出码要分清"自己崩"和"被外部终止"**：
+      //   0xFFFFFFFF（-1，Windows 上显示成 4294967295）是**被外部杀掉**的典型值，
+      //   不是自己崩的。两者混在一起写日志，以后就分不清是不是被人关掉了。
+      const external = code === 4294967295 || code === -1
       if (restarts > MAX_RESTARTS) {
-        log.warn(`smtc 子进程连续退出（code=${code}），不再重试，音乐控制停用`)
+        log.warn(
+          `smtc 子进程连续退出（code=${code}${external ? '，是被外部终止的' : ''}），不再重试，音乐控制停用`
+        )
         enabled = false
         return
       }
-      log.info(`smtc 子进程退出（code=${code}），${RESTART_DELAY_MS / 1000}s 后重试`)
+      log.info(
+        external
+          ? `smtc 子进程被外部终止（code=${code}，不是崩溃），${RESTART_DELAY_MS / 1000}s 后重试`
+          : `smtc 子进程退出（code=${code}），${RESTART_DELAY_MS / 1000}s 后重试`
+      )
       restartTimer = setTimeout(() => {
         restartTimer = null
         if (enabled) spawnChild()

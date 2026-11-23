@@ -19,6 +19,12 @@ using SmtcTool;
 using System.Text.Json;
 using Windows.Media.Control;
 
+// ⚠ **输出编码必须是 UTF-8**：Windows 上 .NET 的控制台默认按 GBK 输出，
+//   而主进程那边是按 UTF-8 读的 → helper 报的中文全是乱码
+//   （实测日志里是 `smtc: ��ѯʧ��:`），媒体相关的错根本读不懂。
+//   不修这条，以后所有媒体故障都只能靠猜。
+Console.OutputEncoding = System.Text.Encoding.UTF8;
+
 var cmd = args.Length > 0 ? args[0] : "list";
 
 try
