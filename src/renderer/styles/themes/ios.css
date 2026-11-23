@@ -36,6 +36,7 @@
 
   /* ---------- 字体：系统粗体 ---------- */
   --font-num: 'Segoe UI Variable', 'SF Pro Display', system-ui, sans-serif;
+  --font-num-weight: 600;
 
   /* ---------- 效果：只有柔和阴影 ---------- */
   --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.12);

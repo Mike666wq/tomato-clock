@@ -40,6 +40,7 @@
 
   /* ---------- 字体：超细无衬线 ---------- */
   --font-num: 'Segoe UI Variable Display', 'Segoe UI Light', 'Segoe UI', system-ui, sans-serif;
+  --font-num-weight: 100;
 
   /* ---------- 效果：光 ---------- */
   --shadow-card: 0 18px 48px rgba(0, 0, 0, 0.5);

@@ -187,7 +187,8 @@ button {
 .ring__time {
   font-family: var(--font-num);
   font-size: var(--fs-time);
-  font-weight: 300;
+  /* 数字的字重也是主题的一部分：衬线 400 / 超细 100 / 系统粗体 600 */
+  font-weight: var(--font-num-weight, 300);
   line-height: 1;
   letter-spacing: -0.02em;
   /* 等宽数字：数字跳动时不会左右抖 */
@@ -726,6 +727,8 @@ button {
   gap: 8px;
   width: 100%;
   margin: 16px 0 2px;
+  /* 原来没有左右内边距，"模板"两个字的左边缘正好顶在窗口边界上，像被切了 */
+  padding-inline: var(--pad-x);
 }
 
 .presets__label,
@@ -910,6 +913,7 @@ button {
   gap: 8px;
   width: 100%;
   margin: 8px 0 2px;
+  padding-inline: var(--pad-x);
 }
 .topics__chip {
   display: flex;

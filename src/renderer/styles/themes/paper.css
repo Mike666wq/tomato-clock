@@ -27,8 +27,9 @@
   --break: #4f7a5b;
   --warn: #8a6a1f;
   --on-phase: #f7f4ee;
-  /* 底轨：2% 墨色。淡到几乎看不见，但得在——0% 时环不能整个消失 */
-  --track: color-mix(in srgb, var(--ink) 2%, transparent);
+  /* 底轨：6% 墨色。2% 太淡了，浅底上等于没有——0% 时屏幕上只剩一个数字，
+     环整个消失，看着像坏了。6% 仍然极淡，但"环在那儿"看得出来。 */
+  --track: color-mix(in srgb, var(--ink) 6%, transparent);
   --hover: color-mix(in srgb, var(--ink) 6%, transparent);
   --active: color-mix(in srgb, var(--ink) 9%, transparent);
   /* 纸感没有光晕，底就是底 */
@@ -40,9 +41,15 @@
   --r-lg: 2px;
   --r-pill: 2px;
   --ring-stroke: 2px; /* 极细弧 */
+  /* 标题栏压到 32px：纸感不需要一条系统标题栏 */
+  --titlebar-h: 32px;
 
-  /* ---------- 字体：数字用衬线 ---------- */
-  --font-num: Georgia, 'Songti SC', 'SimSun', serif;
+  /* ---------- 字体：数字用衬线 ----------
+     用 Cambria 而不是 Georgia：Georgia 的数字默认是**旧式数字**（2 和 5 是 x 字高，
+     0 是全高），秒数一变整个数字就上下跳，跟"跳秒不抖"的要求冲突。
+     Cambria 默认就是等高数字，而且本来就是为屏幕设计的衬线体。 */
+  --font-num: Cambria, Georgia, 'Songti SC', serif;
+  --font-num-weight: 400;
 
   /* ---------- 效果：一律没有 ---------- */
   --shadow-card: none;
@@ -53,7 +60,62 @@
 
 /* ================= 结构覆盖：纸感的形态 ================= */
 
-/* 阶段标签：不靠颜色强调，靠字距 */
+/* 标题栏：去掉"番茄钟"三个字，只留拖拽区和最小化/关闭。
+   "这是番茄钟"用户不可能不知道，而下面居中的"专注"又在说阶段——重复。 */
+:root[data-theme='paper'] .titlebar__title {
+  display: none;
+}
+
+/* 那条 1px 分隔线去掉，让内容和导航连成一片纸 */
+:root[data-theme='paper'] .nav {
+  border-top: none;
+}
+
+/* 阶段标签：靠左，和下面模板/主题两行对齐成一条竖线 */
+:root[data-theme='paper'] .phase-label {
+  align-self: flex-start;
+  margin: 2px 0 8px;
+}
+
+/* 「模板」「主题」两个前缀：纸感里是多余的。
+   内容本身（经典/深度/冲刺、未分类/操作系统复习）已经看得出是两行不同的东西，
+   加个前缀反而像表单。先去掉，分不清再加回来。 */
+:root[data-theme='paper'] .presets__label,
+:root[data-theme='paper'] .topics__label {
+  display: none;
+}
+
+/* 主题行的小圆点：纸感的语言是"线"不是"点"。
+   选中项已经有砖红下划线，只有它保留一个点。 */
+:root[data-theme='paper'] .topics__dot {
+  display: none;
+}
+
+:root[data-theme='paper'] .topics__chip--on .topics__dot {
+  display: inline-block;
+}
+
+/* ---------- 垂直节奏 ----------
+   环下沿到按钮原来有 90px，中间空一块，环显得偏上。
+   现在：环按 --ring-gap 贴住这一格，下面那组（按钮 + 模板 + 主题 + 状态）
+   自己收紧，整体更靠近底部，环更居中。 */
+:root[data-theme='paper'] .controls {
+  margin-top: 6px;
+}
+
+:root[data-theme='paper'] .presets {
+  margin: 12px 0 0;
+}
+
+:root[data-theme='paper'] .topics {
+  margin: 8px 0 0;
+}
+
+:root[data-theme='paper'] .timer__bottom .status {
+  padding-top: 8px;
+}
+
+/* 阶段标签：纸感不靠颜色强调，靠字距 */
 :root[data-theme='paper'] .phase-label {
   color: var(--ink-2);
   letter-spacing: 0.26em;
@@ -140,15 +202,22 @@
   letter-spacing: 0.14em;
 }
 
-/* 环里的时间：衬线体，字重正常，不要细得发虚 */
+/* 环里的时间：衬线体，等高数字（不能是旧式数字，秒数一变就上下跳） */
 :root[data-theme='paper'] .ring__time {
   font-weight: 400;
   letter-spacing: -0.01em;
+  font-variant-numeric: lining-nums tabular-nums;
 }
 
 /* 环里的状态小标签也用衬线，像排版里的注脚 */
 :root[data-theme='paper'] .ring__hint {
-  font-family: Georgia, 'Songti SC', 'SimSun', serif;
+  font-family: Cambria, Georgia, 'Songti SC', serif;
   letter-spacing: 0.12em;
   text-indent: 0.12em;
+}
+
+/* 文字标签之间要多留一点气：胶囊去掉边框之后 6px 太挤 */
+:root[data-theme='paper'] .presets__inner,
+:root[data-theme='paper'] .topics__inner {
+  gap: 14px;
 }

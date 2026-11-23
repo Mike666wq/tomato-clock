@@ -14,41 +14,55 @@
  * 不许散进组件。组件里只准用变量。
  *
  * 规矩：组件里不许硬编码色值；需要新颜色先在主题文件里加变量再引用。
+ *
+ * 注意：这些变量必须写在 :root 里。写在规则外面是**无效声明**，浏览器直接忽略，
+ * 表现是"读出来是空的"，用 var() 的地方全部退回默认值——
+ * 踩过一次：--titlebar-h 掉了，标题栏高度变成内容高度，看着像没写样式。
  */
 
-/* ---- 间距 ---- */
---pad-x: 24px;
---titlebar-h: 44px;
+:root {
+  /* ---- 间距 ---- */
+  --pad-x: 24px;
+  --titlebar-h: 44px;
 
-/* ---- 字号 ---- */
---fs-time: 92px; /* 大数字（环里的时间，实际字号跟环一起缩） */
---fs-label: 13px;
---fs-body: 14px;
---fs-small: 12px;
---fs-tiny: 11px; /* 环内的状态小标签 */
+  /* ---- 字号 ---- */
+  --fs-time: 92px; /* 大数字（环里的时间，实际字号跟环一起缩） */
+  --fs-label: 13px;
+  --fs-body: 14px;
+  --fs-small: 12px;
+  --fs-tiny: 11px; /* 环内的状态小标签 */
 
-/* ---- 字体 ----
-   正文字体三套一样；**数字字体在主题里**（衬线 / 超细 / 系统粗体）。 */
---font-ui: system-ui, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  /* ---- 字体 ----
+     正文字体三套一样；**数字字体在主题里**（衬线 / 超细 / 系统粗体）。 */
+  --font-ui: system-ui, 'Segoe UI', 'Microsoft YaHei', sans-serif;
 
-/* ---- 动效 ---- */
---ease: cubic-bezier(0.4, 0, 0.2, 1);
---dur-fast: 150ms;
---dur-base: 200ms;
---dur-slow: 250ms;
+  /* ---- 动效 ---- */
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 150ms;
+  --dur-base: 200ms;
+  --dur-slow: 250ms;
 
-/* ---- 横向滚动提示（模板条/主题条装不下时右边渐隐） ---- */
---fade-w: 28px;
-/* 遮罩用的实色（只看 alpha，不是界面上的颜色） */
---mask-solid: #000;
+  /* ---- 横向滚动提示（模板条/主题条装不下时右边渐隐） ---- */
+  --fade-w: 28px;
+  /* 遮罩用的实色（只看 alpha，不是界面上的颜色） */
+  --mask-solid: #000;
 
-/* ---- 阶段色（跟主题无关：专注用 --accent，休息用 --break） ----
-   派生色在这里算一次，三个主题共用。
-   注意：这三条必须作用在 html 根元素上——var() 替换用的是"声明所在元素"上的值，
-   如果写在子元素上，底轨会永远按默认的专注红算。 */
---phase: var(--accent);
---phase-soft: color-mix(in srgb, var(--phase) 16%, transparent);
---phase-faint: color-mix(in srgb, var(--phase) 7%, transparent);
+  /* ---- 圆环 ----
+     --ring-max：环的最大直径
+     --ring-mx：环离左右边缘至少留多少
+     --ring-gap：环离上下至少留多少（主题可以调：纸感要"更居中"，霓虹要"更贴边"） */
+  --ring-max: 420px;
+  --ring-mx: 56px;
+  --ring-gap: 10px;
+
+  /* ---- 阶段色（跟主题无关：专注用 --accent，休息用 --break） ----
+     派生色在这里算一次，三个主题共用。
+     注意：这三条必须作用在 html 根元素上——var() 替换用的是"声明所在元素"上的值，
+     如果写在子元素上，底轨会永远按默认的专注红算。 */
+  --phase: var(--accent);
+  --phase-soft: color-mix(in srgb, var(--phase) 16%, transparent);
+  --phase-faint: color-mix(in srgb, var(--phase) 7%, transparent);
+}
 
 html[data-phase='focus'] {
   --phase: var(--accent);

@@ -45,15 +45,19 @@ export function Timer(): React.JSX.Element {
   // 描边宽度跟主题走：纸感 2px 细弧、霓虹 10px、系统感 8px。
   // 环的半径要让开描边，所以主题一变这里就得跟着变。
   const ringStroke = useThemeNumber('--ring-stroke', 8)
+  // 环的尺寸规则也是主题的一部分（最大直径 / 左右留白 / 上下留白）
+  const ringMax = useThemeNumber('--ring-max', 420)
+  const ringMx = useThemeNumber('--ring-mx', 56)
+  const ringGap = useThemeNumber('--ring-gap', 10)
 
   /**
    * 圆环按可用空间缩放，不能写死。
    * 之前写死 320px，用户把窗口缩到 500×589 之后环把下面全顶出去了，
    * 模板条压到导航栏上、状态行被挤没 —— 那是我的锅。
    *
-   * 规则：min(420, 可用宽 - 56, 可用高 × 0.94)，最小 200。
-   * 0.94 是量出来的：这一格里除圆环没别的东西，留 6% 余量给呼吸，
-   * 之前用 0.78 是"怕压到底下的东西"的保守值，结构改过之后可以放开。
+   * 规则：min(最大直径, 可用宽 - 左右留白, 可用高 - 上下留白)，最小 200。
+   * 上下留白是主题变量 --ring-gap：环在窗口里要"居中"，
+   * 留白给得太少会顶到底下的按钮，太多环就缩了。
    */
   useEffect(() => {
     const el = ringAreaRef.current
@@ -61,14 +65,14 @@ export function Timer(): React.JSX.Element {
     const measure = (): void => {
       const w = el.clientWidth
       const h = el.clientHeight
-      const next = Math.max(200, Math.min(420, w - 56, h * 0.94))
+      const next = Math.max(200, Math.min(ringMax, w - ringMx, h - 2 * ringGap))
       setRingSize(Math.round(next))
     }
     measure()
     const ro = new ResizeObserver(measure)
     ro.observe(el)
     return () => ro.disconnect()
-  }, [])
+  }, [ringMax, ringMx, ringGap])
 
   // 订阅主进程状态
   useEffect(() => {
