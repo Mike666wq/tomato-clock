@@ -184,6 +184,48 @@ export type AppData = {
   sessions: Session[]
 }
 
+/**
+ * 崩溃恢复快照（规格 E 组）。
+ *
+ * 存在 `%APPDATA%\pomodoro\running.json`，和 `data.json` 分开：
+ * 这是"当前这一段"的临时状态，每 30 秒重写一次全部历史记录太蠢，
+ * 而且混进历史数据里两边会互相污染。
+ *
+ * 恢复时**一律按暂停处理**（E0：应用退出 = 暂停），
+ * 所以 `running` 只是"落盘那一刻在不在跑"的记录，不是恢复后的状态。
+ */
+export type RunningSnapshot = {
+  /** 快照结构版本。以后改结构时靠它识别旧文件 */
+  v: 1
+  phase: PhaseKind
+  /** 落盘那一刻是否在跑 */
+  running: boolean
+  /** 这一段的计划总长（冻结的那个，切了模板也不变） */
+  segmentTotalSec: number
+  /** 落盘那一刻的剩余秒数 */
+  remainingSec: number
+  /** 这一段累计暂停了多少秒 */
+  pausedSec: number
+  /** 这一段开始时刻（恢复后仍用它算"今天"） */
+  startedAt: string
+  /** 落盘时刻 */
+  savedAt: string
+  /** 这一段的任务名 */
+  task: string
+  /** 这一段挂在哪个主题上 */
+  topicId: string | null
+  /** 当时的模板 id（只作记录；下一段仍用当前设置） */
+  presetId?: string
+  /**
+   * 段序号：每换一段 +1。
+   * 主进程靠它发现"换段了"，从而跳过防抖立刻落盘——
+   * 否则跳过之后有 1 秒窗口，文件里还留着上一段（规格 E9）。
+   */
+  segmentSeq: number
+  focusRounds: number
+  completed: { focus: number; short: number; long: number }
+}
+
 export const DEFAULT_SETTINGS: Settings = {
   activePresetId: DEFAULT_PRESET_ID,
   presets: BUILTIN_PRESETS.map((p) => ({ ...p })),

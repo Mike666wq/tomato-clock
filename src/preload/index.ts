@@ -128,6 +128,10 @@ if (import.meta.env.DEV) {
     phase: 'focus' | 'short' | 'long',
     elapsed: number
   ): Promise<void> => ipcRenderer.invoke('timer:dev-seed', phase, elapsed)
+  // 开发期专用：正常退出（app.quit），用来自动化验证崩溃恢复（规格 E1）。
+  // 托盘里的"退出"没法用脚本点，只能加个口子。
+  ;(api.window as unknown as Record<string, unknown>)['devQuit'] = (): void =>
+    ipcRenderer.send('app:dev-quit')
 }
 
 export type PreloadApi = typeof api

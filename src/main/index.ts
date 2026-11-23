@@ -13,6 +13,7 @@ import { createTray, type TrayController } from './tray'
 import { createIsland, type IslandController } from './island'
 import { createReminder, type ReminderController } from './reminder'
 import { createMusicController, type MediaCommand, type MusicController } from './media'
+import { makeRunningState, type RunningState } from './running-state'
 import { getShortcutLabels, registerShortcuts, replaceShortcut, type ShortcutId } from './shortcuts'
 import { buildStats } from './stats'
 import { exportCsv } from './csv'
@@ -48,6 +49,16 @@ let tray: TrayController | null = null
 let timer: Timer | null = null
 let reminder: ReminderController | null = null
 let music: MusicController | null = null
+/** 崩溃恢复快照的存取（规格 E 组） */
+let runningState: RunningState | null = null
+/** 当前模板 id：写进快照只作记录用 */
+let activePresetId = 'builtin-classic'
+/** 落盘防抖：状态变化后 1 秒才写（规格 E4） */
+let persistTimer: NodeJS.Timeout | null = null
+/** 心跳：每 30 秒落一次盘 */
+let persistHeartbeat: NodeJS.Timeout | null = null
+/** 上次落盘时的段序号：用来发现"换段了" */
+let lastPersistedSeq = -1
 let isQuitting = false
 let recordAutoClose: NodeJS.Timeout | null = null
 /** 渲染层还没加载完时收到的通知，先存着，等页面就绪再补发 */
@@ -111,6 +122,40 @@ async function setIslandVisible(visible: boolean): Promise<void> {
   const current = await jsonStore.getSettings()
   await jsonStore.saveSettings({ ...current, islandVisible: visible })
   log.info(`灵动岛已${visible ? '显示' : '隐藏'}`)
+}
+
+/** 立刻写一次快照（规格 E4：原子写） */
+function writeSnapshot(force = false): void {
+  if (!runningState || !timer) return
+  const snap = timer.getSnapshot()
+  runningState.save({ ...snap, presetId: activePresetId, running: force ? false : snap.running })
+  lastPersistedSeq = snap.segmentSeq
+}
+
+/**
+ * 状态变化后安排一次落盘（规格 E4）。
+ *
+ * 两档：
+ *   - **换段了**（跳过 / 阶段切换 / 重置）→ 立刻写，不等防抖。
+ *     否则跳过之后有 1 秒窗口，文件里还留着上一段（规格 E9）。
+ *   - 其它变化（每秒的倒计时、任务名改动）→ 1 秒防抖后写一次。
+ */
+function schedulePersist(): void {
+  if (!runningState || !timer) return
+  const seq = timer.getSnapshot().segmentSeq
+  if (seq !== lastPersistedSeq) {
+    if (persistTimer) {
+      clearTimeout(persistTimer)
+      persistTimer = null
+    }
+    writeSnapshot()
+    return
+  }
+  if (persistTimer) clearTimeout(persistTimer)
+  persistTimer = setTimeout(() => {
+    persistTimer = null
+    writeSnapshot()
+  }, 1000)
 }
 
 /** 一个阶段自然跑完（或被跳过）：落记录 + 强提醒 + 打开记录卡片 */
@@ -302,9 +347,29 @@ if (!app.requestSingleInstanceLock()) {
     })
 
     const settings = await jsonStore.getSettings()
+    activePresetId = settings.activePresetId
     timer = new Timer(timerConfigOf(settings))
     // 灵动岛上次被藏起来过 → 这次也不显示
     if (settings.islandVisible === false) island?.hide()
+
+    // ---- 崩溃恢复（规格 E 组）----
+    //
+    // 总纲 E0：应用退出 = 暂停。关掉期间时间不前进，
+    // 所以恢复出来的永远是"暂停态 + 退出那一刻的剩余"，不推算、不补记。
+    runningState = makeRunningState(app.getPath('userData'), log)
+    const snapshot = runningState.load()
+    if (snapshot) {
+      timer.restore(snapshot)
+      log.info(
+        `已恢复上次的状态：${snapshot.phase} 剩余 ${snapshot.remainingSec}s（暂停态，规格 E0）`
+      )
+      // E8：恢复成功后立刻把快照写回成"恢复后的状态"。
+      // 等价于消费掉旧快照——下一次启动读到的是这一份，不会恢复到更早的段。
+      writeSnapshot(true)
+    } else {
+      // 没有可恢复的：把可能残留的旧快照清掉
+      runningState.clear()
+    }
 
     // 音乐控制：默认关，开了才拉起 SMTC 子进程（v0.2.2）
     music = createMusicController((state) => {
@@ -318,7 +383,13 @@ if (!app.requestSingleInstanceLock()) {
         if (!win.isDestroyed()) win.webContents.send('timer:state', state)
       }
       tray?.update(state)
+      // 状态变了 → 安排落盘（规格 E4）
+      schedulePersist()
     })
+
+    // 心跳：每 30 秒落一次盘（规格 E4）。
+    // 崩溃/断电时最多丢 30 秒的进度，而恢复时按"暂停"处理，不补那段时间。
+    persistHeartbeat = setInterval(() => writeSnapshot(), 30_000)
 
     // 一个阶段跑完：落记录 + 强提醒
     timer.onPhaseComplete((info) => {
@@ -362,6 +433,7 @@ if (!app.requestSingleInstanceLock()) {
         const next: Settings = { ...current, ...patch }
         await jsonStore.saveSettings(next)
         timer?.updateSettings(timerConfigOf(next))
+        activePresetId = next.activePresetId
         // 设置里的「显示灵动岛」开关要立刻生效，不用重启
         if (patch.islandVisible !== undefined && patch.islandVisible !== current.islandVisible) {
           if (patch.islandVisible) island?.show()
@@ -443,6 +515,12 @@ if (!app.requestSingleInstanceLock()) {
       ipcMain.handle('timer:dev-seed', (_e, phase: PhaseCompleteInfo['phase'], elapsed: number) =>
         timer?.devSeed?.(phase, elapsed)
       )
+      // 开发期：正常退出（= app.quit，会走 before-quit 落盘）。
+      // 用来自动化验证崩溃恢复（规格 E1）：托盘里的"退出"没法用脚本点。
+      ipcMain.on('app:dev-quit', () => {
+        isQuitting = true
+        app.quit()
+      })
     }
 
     ipcMain.on('window:minimize', () => mainWindow?.minimize())
@@ -492,6 +570,18 @@ if (!app.requestSingleInstanceLock()) {
   app.on('before-quit', () => {
     isQuitting = true
     if (recordAutoClose) clearTimeout(recordAutoClose)
+    // 退出前落一次盘（规格 E1）。
+    // force=true = 按"退出即暂停"记录（E0）：关掉期间时间不前进，
+    // 重新打开就是暂停态，剩余 = 退出这一刻的剩余。
+    if (persistTimer) {
+      clearTimeout(persistTimer)
+      persistTimer = null
+    }
+    if (persistHeartbeat) {
+      clearInterval(persistHeartbeat)
+      persistHeartbeat = null
+    }
+    writeSnapshot(true)
     globalShortcut.unregisterAll()
     timer?.dispose()
     tray?.destroy()

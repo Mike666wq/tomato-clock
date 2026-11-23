@@ -9,7 +9,7 @@
 //   activeSec     本阶段实际"跑起来"的秒数，暂停期间不增长
 //   actualSec     阶段结束时写进记录的秒数 = 已跑秒数（已扣掉暂停）
 
-import { PHASE_LABEL, type PhaseKind, type PhaseCompleteInfo, type TimerState } from '../shared/types'
+import { PHASE_LABEL, type PhaseCompleteInfo, type PhaseKind, type RunningSnapshot, type TimerState } from '../shared/types'
 import type { TimerConfig } from '../shared/presets'
 
 export type TimerAction = 'toggle' | 'start' | 'pause' | 'skip' | 'reset'
@@ -56,6 +56,12 @@ export class Timer {
    * 但那也是跑过了，改时长就不该当场生效。
    */
   private segmentHasRun = false
+  /**
+   * 段序号：每换一段 +1（规格 E 组）。
+   * 主进程靠它发现"换段了"，从而跳过防抖立刻落盘——
+   * 否则跳过之后有 1 秒窗口，文件里还留着上一段（E9）。
+   */
+  private segmentSeq = 0
   /** 本次暂停的开始时刻 */
   private pauseStartedAt: number | null = null
   /**
@@ -120,6 +126,66 @@ export class Timer {
     // 而且会被原样写进休息段的记录里，统计时多出一堆没用的文本。
     if (this.phase !== 'focus') return
     this.segmentTask = text
+    this.emit()
+  }
+
+  /**
+   * 导出当前这一段的快照（规格 E 组）。
+   *
+   * 纯数据，不做任何 IO——落盘由主进程负责，这样 `Timer` 仍是可测的纯逻辑类。
+   */
+  getSnapshot(): RunningSnapshot {
+    const total = this.segmentTotalSec
+    const remaining = this.remainingSec()
+    return {
+      v: 1,
+      phase: this.phase,
+      running: this.running,
+      segmentTotalSec: total,
+      remainingSec: remaining,
+      pausedSec: Math.round(
+        (this.pausedMs + (this.pauseStartedAt ? this.now() - this.pauseStartedAt : 0)) / 1000
+      ),
+      startedAt: new Date(this.phaseStartedAt).toISOString(),
+      savedAt: new Date(this.now()).toISOString(),
+      task: this.segmentTask,
+      topicId: this.segmentTopicId,
+      segmentSeq: this.segmentSeq,
+      focusRounds: this.focusRounds,
+      completed: { ...this.completed }
+    }
+  }
+
+  /**
+   * 用快照恢复（规格 E1/E2/E3/E5）。
+   *
+   * **恢复出来一律是暂停态**（E0：应用退出 = 暂停）：
+   * 关掉程序期间时间不前进，所以"退出那一刻的剩余"就是恢复后的剩余，
+   * 不需要推算、不需要补记——机器都没开，凭什么替他记一个番茄。
+   */
+  restore(snapshot: RunningSnapshot): void {
+    this.phase = snapshot.phase
+    this.running = false
+    this.endsAt = null
+    this.pauseStartedAt = null
+    this.pausedMs = Math.max(0, snapshot.pausedSec) * 1000
+    // 段长用快照里那一份（E5）：期间改过设置也不能把正在跑的段改掉
+    this.segmentTotalSec = Math.max(1, snapshot.segmentTotalSec)
+    this.remainingSecCached = Math.max(0, Math.min(snapshot.remainingSec, this.segmentTotalSec))
+    this.segmentTopicId = snapshot.topicId ?? null
+    this.segmentTask = snapshot.task ?? ''
+    // 恢复出来的段算"跑过"：改时长不该当场生效
+    this.segmentHasRun = true
+    this.segmentSeq = snapshot.segmentSeq ?? 0
+    this.focusRounds = Math.max(0, snapshot.focusRounds ?? 0)
+    this.completed = {
+      focus: snapshot.completed?.focus ?? 0,
+      short: snapshot.completed?.short ?? 0,
+      long: snapshot.completed?.long ?? 0
+    }
+    const started = Date.parse(snapshot.startedAt)
+    this.phaseStartedAt = Number.isFinite(started) ? started : this.now()
+    this.lastEmittedSec = -1
     this.emit()
   }
 
@@ -255,6 +321,8 @@ export class Timer {
     this.pausedMs = 0
     // 重置后这一段又回到"没跑过"：改时长会立刻生效
     this.segmentHasRun = false
+    // 重置算换了一段：主进程要立刻落盘，不能等防抖
+    this.segmentSeq += 1
     this.phaseStartedAt = this.now()
     this.remainingSecCached = this.segmentTotalSec
     this.segmentTopicId = this.cfg.topicId
@@ -349,6 +417,8 @@ export class Timer {
     this.pausedMs = 0
     // 新的一段：还没跑过
     this.segmentHasRun = false
+    // 换段了：主进程据此立刻落盘（E9：跳过的段不能留在快照里）
+    this.segmentSeq += 1
     this.phaseStartedAt = endedAt
     // 新的一段开始：主题用"此刻"选中的那个（用户可能刚在休息里切过）
     this.segmentTopicId = this.cfg.topicId

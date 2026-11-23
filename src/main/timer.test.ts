@@ -424,6 +424,115 @@ describe('L1/L2 冻结段长', () => {
   })
 })
 
+// ---------------------------------------------------------------- E 崩溃恢复
+
+describe('E 组：快照与恢复', () => {
+  it('E1 正常退出：快照记着退出那一刻的剩余', () => {
+    timer.apply('start')
+    advanceSec(30)
+    const snap = timer.getSnapshot()
+    expect(snap.v).toBe(1)
+    expect(snap.running).toBe(true)
+    expect(snap.remainingSec).toBe(30)
+    expect(snap.segmentTotalSec).toBe(60)
+    expect(snap.task).toBe('')
+  })
+
+  it('E0/E1 恢复出来一律是暂停态，剩余保留', () => {
+    const snap = { ...timer.getSnapshot(), remainingSec: 42, running: true }
+    timer.restore(snap)
+    const s = timer.getState()
+    expect(s.running).toBe(false)
+    expect(s.remainingSec).toBe(42)
+    expect(s.totalSec).toBe(60)
+  })
+
+  it('E2 崩溃恢复：按最后落盘的状态恢复，不推算流逝的时间', () => {
+    // 快照是 5 分钟前落的：1500 秒的段，还剩 1200
+    const snap = {
+      ...timer.getSnapshot(),
+      segmentTotalSec: 1500,
+      remainingSec: 1200,
+      running: true
+    }
+    timer.restore(snap)
+    // 恢复后剩余还是 1200：关着的这段时间不补（E0）
+    expect(timer.getState().remainingSec).toBe(1200)
+    expect(timer.getState().running).toBe(false)
+  })
+
+  it('E3 暂停时退出：恢复成暂停态，剩余保留', () => {
+    timer.apply('start')
+    advanceSec(10)
+    timer.apply('pause')
+    const snap = timer.getSnapshot()
+    expect(snap.running).toBe(false)
+    expect(snap.remainingSec).toBe(50)
+
+    timer.restore(snap)
+    expect(timer.getState().running).toBe(false)
+    expect(timer.getState().remainingSec).toBe(50)
+  })
+
+  it('E5 恢复时用快照里那一份主题和段长（期间改过设置也不动）', () => {
+    timer.dispose()
+    timer = makeTimer({ topicId: 't1' })
+    timer.apply('start')
+    advanceSec(5)
+    timer.setTask('写方案')
+    const snap = timer.getSnapshot()
+    expect(snap.topicId).toBe('t1')
+    expect(snap.segmentTotalSec).toBe(60)
+
+    // 恢复之前，用户改了设置（切模板 + 换主题）
+    timer.updateSettings({ ...CFG, focusMin: 50, topicId: 't2' })
+    timer.restore(snap)
+
+    const s = timer.getState()
+    expect(s.topicId).toBe('t1') // 还是旧主题
+    expect(s.totalSec).toBe(60) // 还是旧段长，不是新模板的 3000
+    expect(s.task).toBe('写方案')
+  })
+
+  it('E5b 恢复后的这一段算"跑过"：改时长不当场生效', () => {
+    timer.restore({ ...timer.getSnapshot(), remainingSec: 30 })
+    timer.updateSettings({ ...CFG, focusMin: 50 })
+    expect(timer.getState().totalSec).toBe(60)
+  })
+
+  it('E6 快照字段齐全，缺一不可', () => {
+    const snap = timer.getSnapshot()
+    for (const key of [
+      'v',
+      'phase',
+      'running',
+      'segmentTotalSec',
+      'remainingSec',
+      'pausedSec',
+      'startedAt',
+      'savedAt',
+      'task',
+      'topicId',
+      'segmentSeq',
+      'focusRounds',
+      'completed'
+    ]) {
+      expect(snap).toHaveProperty(key)
+    }
+  })
+
+  it('E9 换段时段序号会变（主进程据此立刻落盘）', () => {
+    const before = timer.getSnapshot().segmentSeq
+    timer.apply('start')
+    advanceSec(10)
+    timer.apply('skip')
+    const after = timer.getSnapshot().segmentSeq
+    expect(after).toBeGreaterThan(before)
+    // 快照描述的是新的一段（跳过的那段不进快照）
+    expect(timer.getSnapshot().phase).toBe('short')
+  })
+})
+
 // ---------------------------------------------------------------- G 边界
 
 describe('G 边界', () => {
