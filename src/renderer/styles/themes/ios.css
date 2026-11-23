@@ -1,0 +1,64 @@
+/*
+ * 主题：系统感（iOS Native）
+ *
+ * 一句话自我描述：这是苹果自带的 app。
+ *
+ * 系统红、卡片色、字重 600 的紧凑数字、大圆角、柔和阴影，不用发光。
+ * 深浅都支持（跟随系统 / 浅 / 深）。
+ *
+ * v0.5 第 1 步只把**颜色和形状变量**做进来（分段控件、卡片等结构属于第 4 步）。
+ */
+
+:root[data-theme='ios'] {
+  /* ---------- 深色 ---------- */
+  --bg: #000000;
+  --surface: #1c1c1e;
+  --surface-2: #2c2c2e;
+  --line: rgba(120, 120, 128, 0.28);
+  --ink: #ffffff;
+  --ink-2: rgba(235, 235, 245, 0.6);
+  --ink-3: rgba(235, 235, 245, 0.35);
+  --accent: #ff3b30;
+  --break: #30d158;
+  --warn: #ffd60a;
+  --on-phase: #ffffff;
+  --track: rgba(120, 120, 128, 0.2);
+  --hover: rgba(120, 120, 128, 0.16);
+  --active: rgba(120, 120, 128, 0.24);
+  --app-bg: var(--bg);
+
+  /* ---------- 形状：大圆角 ---------- */
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 22px;
+  --r-pill: 999px;
+  --ring-stroke: 8px;
+
+  /* ---------- 字体：系统粗体 ---------- */
+  --font-num: 'Segoe UI Variable', 'SF Pro Display', system-ui, sans-serif;
+
+  /* ---------- 效果：只有柔和阴影 ---------- */
+  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.12);
+  --shadow-btn: none;
+  --shadow-focus: 0 0 0 3px rgba(255, 59, 48, 0.28);
+  --glow-arc: none;
+}
+
+:root[data-theme='ios'][data-mode='light'] {
+  /* ---------- 浅色 ---------- */
+  --bg: #f2f2f7;
+  --surface: #ffffff;
+  --surface-2: #f0f0f5;
+  --line: rgba(60, 60, 67, 0.18);
+  --ink: #000000;
+  --ink-2: rgba(60, 60, 67, 0.6);
+  --ink-3: rgba(60, 60, 67, 0.35);
+  --accent: #ff3b30;
+  --break: #34c759;
+  --warn: #c93400;
+  --on-phase: #ffffff;
+  --track: rgba(120, 120, 128, 0.2);
+  --hover: rgba(120, 120, 128, 0.12);
+  --active: rgba(120, 120, 128, 0.2);
+  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.08);
+}

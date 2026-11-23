@@ -9,6 +9,7 @@ import { Controls } from '../components/TimerControls'
 import { PresetBar } from '../components/PresetBar'
 import { TopicBar } from '../components/TopicBar'
 import { keyCapture } from '../keyCapture'
+import { useThemeNumber } from '../useTheme'
 import { PHASE_LABEL, type RecordSummary, type Settings, type TimerState } from '../../shared/types'
 
 const FALLBACK: TimerState = {
@@ -40,6 +41,10 @@ export function Timer(): React.JSX.Element {
   const [ringSize, setRingSize] = useState(320)
   const ringAreaRef = useRef<HTMLDivElement>(null)
   const wasRunning = useRef(false)
+
+  // 描边宽度跟主题走：纸感 2px 细弧、霓虹 10px、系统感 8px。
+  // 环的半径要让开描边，所以主题一变这里就得跟着变。
+  const ringStroke = useThemeNumber('--ring-stroke', 8)
 
   /**
    * 圆环按可用空间缩放，不能写死。
@@ -116,7 +121,6 @@ export function Timer(): React.JSX.Element {
   }, [])
 
   const todayMin = Math.round(summary.todayFocusSec / 60)
-  const totalMin = Math.round(summary.totalFocusSec / 60)
 
   /**
    * 三种状态要分开：
@@ -133,7 +137,13 @@ export function Timer(): React.JSX.Element {
 
       {/* 中部：自适应高度，装不下就滚，绝不压到底下的东西 */}
       <div className="timer__ring" ref={ringAreaRef}>
-        <Ring total={state.totalSec} remaining={state.remainingSec} breathe={breathe} size={ringSize}>
+        <Ring
+          total={state.totalSec}
+          remaining={state.remainingSec}
+          breathe={breathe}
+          size={ringSize}
+          stroke={ringStroke}
+        >
           <div className="ring__time">{format(state.remainingSec)}</div>
           <div className="ring__hint">{hint}</div>
         </Ring>
@@ -163,9 +173,13 @@ export function Timer(): React.JSX.Element {
           />
         ) : null}
 
+        {/*
+          状态行只留"今天"。
+          累计去统计页看——主界面信息越少越好，而且"累计 320"没有单位，
+          看不出是分钟还是别的。
+        */}
         <div className="status">
-          <span className="status__dot">●</span> 今日 {summary.todayCount} 个番茄 · 今日专注 {todayMin} 分钟 ·
-          累计 {totalMin} 分钟
+          今天 {summary.todayCount} 个 · {todayMin} 分钟
         </div>
       </div>
     </div>

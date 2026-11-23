@@ -6,6 +6,7 @@
 //   $env:CDP_OUT='C:\path\x.png'  # 输出文件
 //   $env:CDP_EVAL="表达式"          # 截图前先执行（可选）
 //   $env:CDP_DELAY='1200'         # 执行后等多久再截（毫秒）
+//   $env:CDP_EMULATE='420x560'    # 把视口改成这个尺寸再截（用来拍最小窗口）
 //   node scripts/cdp-shot.mjs
 //
 // 为什么不用 capturePage 的环境变量那条路：那条路拍完就退出应用，
@@ -19,6 +20,7 @@ const want = process.env.CDP_TARGET ?? 'main'
 const out = process.env.CDP_OUT ?? 'shot.png'
 const expr = process.env.CDP_EVAL ?? ''
 const delay = Number(process.env.CDP_DELAY ?? '800')
+const emulate = process.env.CDP_EMULATE ?? ''
 
 async function targets() {
   const res = await fetch(`http://127.0.0.1:${port}/json`)
@@ -71,6 +73,22 @@ if (!picked.length) {
 
 const ws = await connect(picked[0].webSocketDebuggerUrl)
 console.log(`# target: ${picked[0].url}`)
+
+if (emulate) {
+  const [w, h] = emulate.split('x').map((n) => Number(n))
+  if (!w || !h) {
+    console.log(`BAD_EMULATE(${emulate})`)
+    process.exit(1)
+  }
+  // 视口改成最小窗口尺寸：布局会跟着变，截出来的就是最小窗口的样子
+  await send(ws, 'Emulation.setDeviceMetricsOverride', {
+    width: w,
+    height: h,
+    deviceScaleFactor: 1.5,
+    mobile: false
+  })
+  console.log(`# emulate ${w}x${h}`)
+}
 
 if (expr) {
   const r = await send(ws, 'Runtime.evaluate', {

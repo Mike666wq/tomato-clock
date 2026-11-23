@@ -1,0 +1,50 @@
+/*
+ * 主题：玻璃霓虹（Neon Glass）
+ *
+ * 一句话自我描述：这是一块发光装置。
+ *
+ * 近黑底 + 径向渐变、荧光橙、进度弧双层发光、字重 100 的数字带光晕、
+ * 半透明玻璃面板、发光圆形主按钮。
+ *
+ * 这套只有深色一档：切到它就落在深色。
+ *
+ * v0.5 第 1 步只把**颜色和形状变量**做进来（结构形态属于第 4 步）。
+ * 所以现在切到它会看到"霓虹的配色 + 原来的按钮形态"，
+ * 这是已知的不完整状态，不是最终稿。
+ */
+
+:root[data-theme='neon'] {
+  /* ---------- 颜色 ---------- */
+  --bg: #08090b;
+  --surface: rgba(255, 255, 255, 0.035);
+  --surface-2: rgba(255, 255, 255, 0.06);
+  --line: rgba(255, 255, 255, 0.1);
+  --ink: #f2f4f7;
+  --ink-2: rgba(242, 244, 247, 0.55);
+  --ink-3: rgba(242, 244, 247, 0.35);
+  --accent: #ff5a3c;
+  --break: #4fd6a8;
+  --warn: #ffc14d;
+  --on-phase: #ffffff;
+  --track: rgba(255, 255, 255, 0.06);
+  --hover: rgba(255, 255, 255, 0.06);
+  --active: rgba(255, 255, 255, 0.1);
+  --app-bg: radial-gradient(circle at 50% 28%, #1a0e14, #08090b 70%), var(--bg);
+
+  /* ---------- 形状：玻璃胶囊 ---------- */
+  --r-sm: 12px;
+  --r-md: 16px;
+  --r-lg: 18px;
+  --r-pill: 999px;
+  --ring-stroke: 10px;
+
+  /* ---------- 字体：超细无衬线 ---------- */
+  --font-num: 'Segoe UI Variable Display', 'Segoe UI Light', 'Segoe UI', system-ui, sans-serif;
+
+  /* ---------- 效果：光 ---------- */
+  --shadow-card: 0 18px 48px rgba(0, 0, 0, 0.5);
+  --shadow-btn: 0 0 24px rgba(255, 90, 60, 0.55);
+  --shadow-focus: 0 0 0 3px rgba(255, 90, 60, 0.28);
+  /* 进度弧的双层发光（SVG 上用 filter） */
+  --glow-arc: drop-shadow(0 0 8px rgba(255, 90, 60, 0.6)) drop-shadow(0 0 24px rgba(255, 90, 60, 0.4));
+}

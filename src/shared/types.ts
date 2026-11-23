@@ -12,6 +12,73 @@ export type PhaseKind = 'focus' | 'short' | 'long'
 /** 打断来源 */
 export type InterruptKind = 'none' | 'internal' | 'external'
 
+/**
+ * 界面主题（v0.5）。
+ *
+ * 三套视觉语言，不只是换色：数字字体、圆角、按钮形态、有没有光都不一样，
+ * 所以颜色和形状都放在 styles/themes/*.css 里，这里只管"用哪一套"。
+ */
+export type UiTheme = 'paper' | 'neon' | 'ios'
+
+/** 深浅模式。纸感只能浅、霓虹只能深，系统感三种都行 */
+export type UiMode = 'system' | 'light' | 'dark'
+
+export type UiThemeInfo = {
+  id: UiTheme
+  /** 给人看的名字 */
+  name: string
+  /** 一句话自我描述 */
+  desc: string
+  /** 这套主题支持哪几档深浅 */
+  modes: UiMode[]
+  /** 预览卡上写的小字 */
+  preview: string
+}
+
+/** 三套主题的元信息。设置页的预览卡直接拿这里渲染 */
+export const UI_THEMES: UiThemeInfo[] = [
+  { id: 'paper', name: '纸感', desc: '这是一张纸', modes: ['light'], preview: '纸感' },
+  { id: 'neon', name: '玻璃霓虹', desc: '这是一块发光装置', modes: ['dark'], preview: '霓虹' },
+  {
+    id: 'ios',
+    name: '系统感',
+    desc: '这是苹果自带的 app',
+    modes: ['system', 'light', 'dark'],
+    preview: '系统感'
+  }
+]
+
+/**
+ * 切主题时的深浅兜底。
+ *
+ * 纸感只有浅、霓虹只有深：用户在深色下切到纸感，不能让界面保持深色
+ * （那就成"黑底纸"了，也不是纸感）。所以直接落到这套主题支持的那一档。
+ */
+export function resolveUiTheme(
+  theme: UiTheme,
+  mode: UiMode,
+  systemPrefersDark: boolean
+): { theme: UiTheme; mode: 'light' | 'dark' } {
+  const info = UI_THEMES.find((t) => t.id === theme) ?? UI_THEMES[0]
+  let m: UiMode = mode
+  if (!info.modes.includes(m)) m = info.modes[0]
+  if (m === 'system') m = systemPrefersDark ? 'dark' : 'light'
+  return { theme: info.id, mode: m }
+}
+
+/**
+ * 每套主题的窗口底色。
+ *
+ * 主进程拿它设窗口背景色：窗口底色必须和界面底色一样，
+ * 否则纸感（浅底）启动时会先闪一下深色，闪一下很难受。
+ */
+export const UI_THEME_BG: Record<UiTheme, { light: string; dark: string }> = {
+  paper: { light: '#f4f1ea', dark: '#f4f1ea' },
+  neon: { light: '#08090b', dark: '#08090b' },
+  ios: { light: '#f2f2f7', dark: '#000000' }
+}
+
+
 export type Settings = {
   /** 当前模板（v0.3-a 起，时长由模板决定，不再是散字段） */
   activePresetId: string
@@ -29,6 +96,10 @@ export type Settings = {
   islandVisible: boolean
   /** 灵动岛展开态要不要显示音乐控制那一行。默认关：不是所有人都想在计时条里多一行东西 */
   showMusicControl: boolean
+  /** 界面主题（v0.5）。默认纸感 */
+  uiTheme: UiTheme
+  /** 深浅模式。纸感/霓虹只有一档，切过去会自动落到它支持的那档 */
+  uiMode: UiMode
   window: { x?: number; y?: number; w: number; h: number }
 }
 
@@ -237,6 +308,8 @@ export const DEFAULT_SETTINGS: Settings = {
   launchAtLogin: false,
   islandVisible: true,
   showMusicControl: false,
+  uiTheme: 'paper',
+  uiMode: 'system',
   window: { w: 480, h: 580 }
 }
 

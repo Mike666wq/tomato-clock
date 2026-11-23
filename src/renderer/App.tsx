@@ -8,7 +8,8 @@ import { Nav, type PageKey } from './components/Nav'
 import { Timer } from './pages/Timer'
 import { Stats } from './pages/Stats'
 import { SettingsPage } from './pages/Settings'
-import type { InterruptKind, Notice, Session } from '../shared/types'
+import { useTheme } from './useTheme'
+import type { InterruptKind, Notice, Session, Settings } from '../shared/types'
 
 /** 结束提醒：播放自带 wav（不依赖系统提示音） */
 function playDing(volume: number): void {
@@ -35,7 +36,11 @@ export default function App(): React.JSX.Element {
   const [record, setRecord] = useState<Session | null>(null)
   const [flash, setFlash] = useState(false)
   const [page, setPage] = useState<PageKey>(initialPage)
+  const [settings, setSettings] = useState<Settings | null>(null)
   const noticeTimer = useRef<number | null>(null)
+
+  // 主题/深浅写到 html 根元素上（颜色、圆角、字体全在主题文件里）
+  useTheme(settings)
 
   const showNotice = useCallback((text: string) => {
     setNotice({ id: String(Date.now()), text, tone: 'info' })
@@ -73,12 +78,17 @@ export default function App(): React.JSX.Element {
     // 主进程让切页（灵动岛右键菜单里的"设置"）
     const offPage = api.nav.onPage((p) => setPage(p))
 
+    // 主题跟着设置走
+    void api.settings.get().then(setSettings)
+    const offSettings = api.settings.onChanged(setSettings)
+
     return () => {
       offNotice()
       offOpen()
       offClose()
       offFire()
       offPage()
+      offSettings()
     }
   }, [showNotice, showWarn])
 

@@ -8,6 +8,9 @@ release/
 
 *.tsbuildinfo
 
+# 临时目录（截图中间产物、临时 dev profile 等）
+.tmp/
+
 # .NET 工具的构建产物（tools/smtc）
 tools/smtc/bin/
 tools/smtc/obj/

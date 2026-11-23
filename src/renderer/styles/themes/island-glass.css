@@ -1,0 +1,60 @@
+/*
+ * 灵动岛的皮肤（不是界面主题）。
+ *
+ * 灵动岛是独立的第二个窗口，有自己的形态和配色，跟主窗口的主题无关：
+ * 它一直是深色玻璃胶囊。v0.5 第 5 步才让它跟随主窗口主题。
+ *
+ * 所以这里的变量定义在普通的 :root 上（不带 data-theme），
+ * 由 island.tsx 单独引入——主窗口不会加载这个文件。
+ */
+
+:root {
+  /* ---------- 岛自己的颜色 ---------- */
+  --ink: #edeff2;
+  --ink-2: #9aa1ac;
+  --surface-2: #23262c;
+  --line: #24282f;
+  --accent: #ff6b57;
+  --break: #5ac49b;
+
+  /* ---------- 灵动岛（屏幕顶端悬浮胶囊） ---------- */
+  /* 伪毛玻璃四层：半透明底 + 噪点 + 高光/暗边 + 内阴影（缺一层就不像玻璃）
+     底色是 rgba(34,34,34,0.97)：不透明度再高一点，人眼在暗部对壁纸的低频纹理
+     特别敏感，0.95 时还能认出那是泡沫还是水纹；磨砂感靠噪点和高光，不靠真透明 */
+  --island-bg: rgba(34, 34, 34, 0.97);
+  /* 胶囊内再压一层由上到下的暗色渐变，把透过来的纹理彻底压住 */
+  --island-shade: linear-gradient(to bottom, rgba(0, 0, 0, 0.25), rgba(0, 0, 0, 0.45));
+  --island-edge: color-mix(in srgb, var(--ink) 8%, transparent);
+  --island-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --island-hairline: rgba(255, 255, 255, 0.1);
+  --island-bottom-edge: rgba(0, 0, 0, 0.35);
+  --island-inner: rgba(255, 255, 255, 0.06);
+  /* 噪点贴图：SVG feTurbulence，opacity 0.035 + mix-blend-mode: overlay */
+  --island-noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+  --island-w: 172px;
+  --island-h: 34px;
+  --island-h-expanded: 92px;
+  --island-h-expanded-music: 118px; /* 展开态且显示了音乐控制那一行 */
+  --island-radius: 17px; /* 收起态下沿做半圆（半高 17px），最像灵动岛 */
+  --island-radius-expanded: 20px; /* 展开态半高 38px 太大，像面包 */
+  --island-side-pad: 8px;
+  --island-bottom-pad: 14px;
+  --island-gap: 9px;
+  --island-gap-expanded: 12px;
+  --island-dot: 8px;
+  --island-fs-time: 17px;
+  --island-fs-time-expanded: 34px;
+  --island-fs-task: 13px;
+  --island-pad-x: 14px;
+  --island-chip-pad: 9px;
+  --island-btn: 26px;
+  --island-btn-gap: 2px;
+  --island-bar-h: 2px;
+  --island-bar-inset: 18px;
+  --island-bar-bottom: 8px;
+  --island-track: color-mix(in srgb, var(--ink) 12%, transparent);
+  /* 音乐控制行（v0.2.2） */
+  --island-music-h: 26px;
+  --island-music-gap: 6px;
+  --island-music-btn: 20px;
+}

@@ -5,20 +5,12 @@ import { keyCapture } from '../keyCapture'
 import { PresetManager } from '../components/PresetManager'
 import { TopicManager } from '../components/TopicManager'
 import { BUILTIN_PRESETS } from '../../shared/presets'
-import type { Settings, ShortcutDef } from '../../shared/types'
+import { DEFAULT_SETTINGS, type Settings, type ShortcutDef } from '../../shared/types'
 
+// 默认值统一在 shared/types 里，这里只做一份拷贝
 const DEFAULTS: Settings = {
-  activePresetId: 'builtin-classic',
-  presets: BUILTIN_PRESETS.map((p) => ({ ...p })),
-  topics: [],
-  activeTopicId: null,
-  autoStartNext: false,
-  soundOn: true,
-  volume: 0.5,
-  launchAtLogin: false,
-  islandVisible: true,
-  showMusicControl: false,
-  window: { w: 480, h: 580 }
+  ...DEFAULT_SETTINGS,
+  presets: BUILTIN_PRESETS.map((p) => ({ ...p }))
 }
 
 type Props = {

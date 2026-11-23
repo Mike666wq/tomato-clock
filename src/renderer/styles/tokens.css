@@ -1,116 +1,55 @@
 /*
- * tokens.css —— 主题的唯一入口。
+ * tokens.css —— 与主题无关的常量。
  *
- * 规则：整个渲染层不允许出现任何硬编码色值/像素值，
- * 需要新颜色或新尺寸，先在这里加变量，再在组件里用 var() 引用。
- * 派生色一律用 color-mix 基于上面的基础色推导，不引入新色相。
+ * v0.5 起分成两层（这是这次主题化的核心）：
+ *
+ *   这一层（tokens.css）：所有主题都一样的东西——间距、字号、动效曲线。
+ *   主题层（styles/themes/*.css）：颜色、圆角、数字字体、阴影/发光、底轨透明度。
+ *     一套主题一个文件，根选择器 :root[data-theme="paper"] 等。
+ *
+ * 为什么不能只靠变量换主题：三套风格的差别在**形状和字体**上，
+ * 纸感的主按钮是"文字加一条下划线"，霓虹是发光圆键，系统感是药丸——
+ * 这不是换色能换出来的。所以每个主题文件里除了变量，还允许有
+ * **少量结构覆盖块**（按钮形态、标签形态这种），但必须集中在主题文件里，
+ * 不许散进组件。组件里只准用变量。
+ *
+ * 规矩：组件里不许硬编码色值；需要新颜色先在主题文件里加变量再引用。
  */
 
-:root {
-  /* ---- 基础色板（方案第五节） ---- */
-  --bg: #0e1013; /* 窗口底色 */
-  --surface: #171a1f; /* 卡片 / 浮层 */
-  --line: #24282f; /* 分隔线、描边 */
-  --ink: #edeff2; /* 主文字 */
-  --ink-2: #9aa1ac; /* 次要文字 */
-  --accent: #ff6b57; /* 专注态主色（番茄红） */
-  --break: #5ac49b; /* 休息态主色：降饱和、往暖里拉，别和番茄红不像一家 */
-  --warn: #f5b942; /* 被打断 / 超时 */
+/* ---- 间距 ---- */
+--pad-x: 24px;
+--titlebar-h: 44px;
 
-  /* ---- 派生色（随阶段变化） ---- */
-  --phase: var(--accent);
-  --phase-soft: color-mix(in srgb, var(--phase) 16%, transparent);
-  --phase-faint: color-mix(in srgb, var(--phase) 7%, transparent);
-  /* 底轨保持中性灰，不染相位色；氛围靠底色柔光，不靠把轨道染色 */
-  --track: color-mix(in srgb, var(--ink) 8%, var(--line));
-  --on-phase: var(--bg); /* 落在主色块上的文字色 */
+/* ---- 字号 ---- */
+--fs-time: 92px; /* 大数字（环里的时间，实际字号跟环一起缩） */
+--fs-label: 13px;
+--fs-body: 14px;
+--fs-small: 12px;
+--fs-tiny: 11px; /* 环内的状态小标签 */
 
-  /* ---- 表面 ---- */
-  --surface-2: color-mix(in srgb, var(--surface) 55%, var(--bg));
-  --hover: color-mix(in srgb, var(--ink) 7%, transparent);
-  --active: color-mix(in srgb, var(--ink) 12%, transparent);
+/* ---- 字体 ----
+   正文字体三套一样；**数字字体在主题里**（衬线 / 超细 / 系统粗体）。 */
+--font-ui: system-ui, 'Segoe UI', 'Microsoft YaHei', sans-serif;
 
-  /* ---- 尺寸 ---- */
-  --ring-size: 320px;
-  --ring-stroke: 8px;
-  --titlebar-h: 44px;
-  --pad-x: 24px;
+/* ---- 动效 ---- */
+--ease: cubic-bezier(0.4, 0, 0.2, 1);
+--dur-fast: 150ms;
+--dur-base: 200ms;
+--dur-slow: 250ms;
 
-  /* ---- 圆角 ---- */
-  --r-sm: 8px;
-  --r-md: 12px;
-  --r-lg: 18px;
-  --r-pill: 999px;
+/* ---- 横向滚动提示（模板条/主题条装不下时右边渐隐） ---- */
+--fade-w: 28px;
+/* 遮罩用的实色（只看 alpha，不是界面上的颜色） */
+--mask-solid: #000;
 
-  /* ---- 字体 ---- */
-  --font-ui: system-ui, 'Segoe UI', 'Microsoft YaHei', sans-serif;
-  --font-num: 'Segoe UI Variable Display', 'Segoe UI Light', 'Segoe UI', system-ui, sans-serif;
+/* ---- 阶段色（跟主题无关：专注用 --accent，休息用 --break） ----
+   派生色在这里算一次，三个主题共用。
+   注意：这三条必须作用在 html 根元素上——var() 替换用的是"声明所在元素"上的值，
+   如果写在子元素上，底轨会永远按默认的专注红算。 */
+--phase: var(--accent);
+--phase-soft: color-mix(in srgb, var(--phase) 16%, transparent);
+--phase-faint: color-mix(in srgb, var(--phase) 7%, transparent);
 
-  /* ---- 字号 ---- */
-  --fs-time: 92px; /* 大数字 88–96px */
-  --fs-label: 13px;
-  --fs-body: 14px;
-  --fs-small: 12px;
-  --fs-tiny: 11px; /* 圆环内的状态小标签 */
-
-  /* ---- 灵动岛（屏幕顶端悬浮胶囊） ---- */
-  /* 伪毛玻璃四层：半透明底 + 噪点 + 高光/暗边 + 内阴影（缺一层就不像玻璃）
-     底色是 rgba(34,34,34,0.97)：不透明度再高一点，人眼在暗部对壁纸的低频纹理
-     特别敏感，0.95 时还能认出那是泡沫还是水纹；磨砂感靠噪点和高光，不靠真透明 */
-  --island-bg: rgba(34, 34, 34, 0.97);
-  /* 胶囊内再压一层由上到下的暗色渐变，把透过来的纹理彻底压住 */
-  --island-shade: linear-gradient(to bottom, rgba(0, 0, 0, 0.25), rgba(0, 0, 0, 0.45));
-  --island-edge: color-mix(in srgb, var(--ink) 8%, transparent);
-  --island-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-  --island-hairline: rgba(255, 255, 255, 0.1);
-  --island-bottom-edge: rgba(0, 0, 0, 0.35);
-  --island-inner: rgba(255, 255, 255, 0.06);
-  /* 噪点贴图：SVG feTurbulence，opacity 0.035 + mix-blend-mode: overlay */
-  --island-noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
-  --island-w: 172px;
-  --island-h: 34px;
-  --island-h-expanded: 92px;
-  --island-h-expanded-music: 118px; /* 展开态且显示了音乐控制那一行 */
-  --island-radius: 17px; /* 收起态下沿做半圆（半高 17px），最像灵动岛 */
-  --island-radius-expanded: 20px; /* 展开态半高 38px 太大，像面包 */
-  --island-side-pad: 8px;
-  --island-bottom-pad: 14px;
-  --island-gap: 9px;
-  --island-gap-expanded: 12px;
-  --island-dot: 8px;
-  --island-fs-time: 17px;
-  --island-fs-time-expanded: 34px;
-  --island-fs-task: 13px;
-  --island-pad-x: 14px;
-  --island-chip-pad: 9px;
-  --island-btn: 26px;
-  --island-btn-gap: 2px;
-  --island-bar-h: 2px;
-  --island-bar-inset: 18px;
-  --island-bar-bottom: 8px;
-  --island-track: color-mix(in srgb, var(--ink) 12%, transparent);
-  /* 音乐控制行（v0.2.2） */
-  --island-music-h: 26px;
-  --island-music-gap: 6px;
-  --island-music-btn: 20px;
-
-  /* ---- 动效 ---- */
-  --ease: cubic-bezier(0.4, 0, 0.2, 1);
-  --dur-fast: 150ms;
-  --dur-base: 200ms;
-  --dur-slow: 250ms;
-
-  /* ---- 横向滚动提示（模板条/主题条装不下时右边渐隐） ---- */
-  --fade-w: 28px;
-  --mask-solid: #000;
-}
-
-/* 换阶段 → 换整个界面的色调。
- *
- * 注意：这里必须作用在 html 根元素上。因为 --track / --phase-soft 这些派生色
- * 声明在 :root，var() 替换用的是"声明所在元素"上的 --phase 值。
- * 如果阶段属性挂在子元素上，派生色会永远按 :root 的默认色（专注红）算，
- * 底轨不会跟着换色。 */
 html[data-phase='focus'] {
   --phase: var(--accent);
 }

@@ -57,10 +57,9 @@ button {
   display: flex;
   flex-direction: column;
   height: 100%;
-  /* 一层极淡的阶段色光晕，给深色底一点温度，不做渐变彩虹 */
-  background:
-    radial-gradient(120% 62% at 50% 34%, var(--phase-faint) 0%, transparent 70%),
-    var(--bg);
+  /* 底色交给主题：深色底原来有一层极淡的阶段色光晕，
+     纸感不要光晕（--app-bg 就是纯底色） */
+  background: var(--app-bg, var(--bg));
   transition: background var(--dur-slow) var(--ease);
 }
 
@@ -154,6 +153,8 @@ button {
   stroke: var(--phase);
   stroke-width: var(--ring-stroke);
   stroke-linecap: round;
+  /* 霓虹的双层发光；其它主题是 none */
+  filter: var(--glow-arc, none);
   /* 连续走，不是每秒一跳 */
   transition: stroke-dashoffset 1s linear, stroke var(--dur-slow) var(--ease);
 }
@@ -232,6 +233,7 @@ button {
   background: var(--phase);
   color: var(--on-phase);
   font-weight: 500;
+  box-shadow: var(--shadow-btn, none);
   transition: background var(--dur-slow) var(--ease), color var(--dur-slow) var(--ease),
     transform var(--dur-fast) var(--ease);
 }
@@ -292,6 +294,7 @@ button {
   border-radius: var(--r-md);
   background: var(--surface);
   border: 1px solid var(--line);
+  box-shadow: var(--shadow-card, none);
 }
 
 .card__title {
@@ -595,7 +598,7 @@ button {
   background: var(--surface);
   border: 1px solid var(--line);
   outline: none;
-  box-shadow: 0 18px 48px color-mix(in srgb, var(--bg) 70%, transparent);
+  box-shadow: var(--shadow-card, 0 18px 48px color-mix(in srgb, var(--bg) 70%, transparent));
 }
 
 /* 结束的是休息段 → 用休息绿 */

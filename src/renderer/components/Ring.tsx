@@ -1,7 +1,8 @@
 // 圆环进度。用 stroke-dashoffset 连续走，不是每秒一跳。
 //
 // 尺寸由外面算好传进来（主界面要按可用高度缩放，写死 320 会在小窗口里顶出去）。
-// 描边宽度固定 8px，不跟着尺寸缩放，否则环大了线也跟着粗。
+// 描边宽度也由外面传：各套主题不一样（纸感 2px 细弧、霓虹 10px、系统感 8px），
+// 而半径要让开描边，所以宽度一变半径就得重算。
 
 type RingProps = {
   /** 阶段总秒数 */
@@ -12,14 +13,17 @@ type RingProps = {
   breathe?: boolean
   /** 直径（DIP）。不传就用 token 里的默认值 */
   size?: number
+  /** 描边宽度（DIP）。不传就是 8 */
+  stroke?: number
   children?: React.ReactNode
 }
 
 const STROKE = 8
 
-export function Ring({ total, remaining, breathe, size, children }: RingProps): React.JSX.Element {
+export function Ring({ total, remaining, breathe, size, stroke, children }: RingProps): React.JSX.Element {
   const px = size ?? 320
-  const radius = (px - STROKE) / 2 - 4
+  const sw = stroke ?? STROKE
+  const radius = (px - sw) / 2 - 4
   const circumference = 2 * Math.PI * radius
 
   const progress = total > 0 ? Math.min(1, Math.max(0, 1 - remaining / total)) : 0

@@ -1,0 +1,154 @@
+/*
+ * 主题：纸感（Paper）
+ *
+ * 一句话自我描述：这是一张纸。
+ *
+ * 暖白纸底、墨黑字、砖红、2px 极细弧（底轨淡到几乎看不见）、
+ * 衬线数字、主按钮是"文字加一条下划线"而不是圆形实心。
+ * 无渐变、无阴影、无发光、几乎无圆角。
+ *
+ * 这套只有浅色一档：切到它就落在浅色（resolveUiTheme 兜底），
+ * 深色底 + 纸感字不是纸感，是别的什么东西。
+ *
+ * 规矩：颜色和形状都在这个文件里；组件里只准用变量。
+ * 结构覆盖块（按钮形态这种没法用变量表达的）也集中在这里，不许散进组件。
+ */
+
+:root[data-theme='paper'] {
+  /* ---------- 颜色 ---------- */
+  --bg: #f4f1ea; /* 暖白，不是纯白 */
+  --surface: #fbf9f4; /* 卡片比底略亮一点 */
+  --surface-2: #ece7db;
+  --line: #e2ddd0;
+  --ink: #17170f; /* 墨黑，不是纯黑 */
+  --ink-2: #8a8578;
+  --ink-3: color-mix(in srgb, var(--ink-2) 80%, transparent);
+  --accent: #b8472c; /* 砖红，压低饱和 */
+  --break: #4f7a5b;
+  --warn: #8a6a1f;
+  --on-phase: #f7f4ee;
+  /* 底轨：2% 墨色。淡到几乎看不见，但得在——0% 时环不能整个消失 */
+  --track: color-mix(in srgb, var(--ink) 2%, transparent);
+  --hover: color-mix(in srgb, var(--ink) 6%, transparent);
+  --active: color-mix(in srgb, var(--ink) 9%, transparent);
+  /* 纸感没有光晕，底就是底 */
+  --app-bg: var(--bg);
+
+  /* ---------- 形状：几乎无圆角 ---------- */
+  --r-sm: 2px;
+  --r-md: 2px;
+  --r-lg: 2px;
+  --r-pill: 2px;
+  --ring-stroke: 2px; /* 极细弧 */
+
+  /* ---------- 字体：数字用衬线 ---------- */
+  --font-num: Georgia, 'Songti SC', 'SimSun', serif;
+
+  /* ---------- 效果：一律没有 ---------- */
+  --shadow-card: none;
+  --shadow-btn: none;
+  --shadow-focus: none;
+  --glow-arc: none;
+}
+
+/* ================= 结构覆盖：纸感的形态 ================= */
+
+/* 阶段标签：不靠颜色强调，靠字距 */
+:root[data-theme='paper'] .phase-label {
+  color: var(--ink-2);
+  letter-spacing: 0.26em;
+}
+
+/* 主按钮：文字 + 一条 1px 下划线 */
+:root[data-theme='paper'] .btn--primary {
+  min-width: 0;
+  height: auto;
+  padding: 2px 4px 6px;
+  background: none;
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  border-radius: 0;
+  border-bottom: 1px solid var(--ink);
+}
+
+:root[data-theme='paper'] .btn--primary:hover {
+  background: none;
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+:root[data-theme='paper'] .btn--primary:active {
+  transform: none;
+}
+
+/* 次要按钮：也是文字，不画框 */
+:root[data-theme='paper'] .btn--ghost {
+  min-width: 0;
+  height: auto;
+  padding: 2px 4px;
+  border: none;
+  background: none;
+  color: var(--ink-2);
+  letter-spacing: 0.08em;
+}
+
+:root[data-theme='paper'] .btn--ghost:hover {
+  color: var(--ink);
+  background: none;
+  border-color: transparent;
+}
+
+/* 模板 / 主题：退成文字，选中的带一条砖红下划线 */
+:root[data-theme='paper'] .presets__chip,
+:root[data-theme='paper'] .topics__chip {
+  height: auto;
+  padding: 3px 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  color: var(--ink-2);
+}
+
+:root[data-theme='paper'] .presets__chip:hover,
+:root[data-theme='paper'] .topics__chip:hover {
+  background: none;
+  color: var(--ink);
+}
+
+:root[data-theme='paper'] .presets__chip--on,
+:root[data-theme='paper'] .topics__chip--on {
+  background: none;
+  border: none;
+  color: var(--ink);
+  border-bottom: 1px solid var(--accent);
+}
+
+/* 时长不在主界面上写：切模板时你看的是"哪个"，不是"多少分钟" */
+:root[data-theme='paper'] .presets__chip > em {
+  display: none;
+}
+
+/* 状态行前面那颗点去掉，纸感里不画装饰 */
+:root[data-theme='paper'] .status__dot {
+  display: none;
+}
+
+/* 底部导航：拉开字距，像排版里的页脚 */
+:root[data-theme='paper'] .nav__item {
+  letter-spacing: 0.14em;
+}
+
+/* 环里的时间：衬线体，字重正常，不要细得发虚 */
+:root[data-theme='paper'] .ring__time {
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+/* 环里的状态小标签也用衬线，像排版里的注脚 */
+:root[data-theme='paper'] .ring__hint {
+  font-family: Georgia, 'Songti SC', 'SimSun', serif;
+  letter-spacing: 0.12em;
+  text-indent: 0.12em;
+}

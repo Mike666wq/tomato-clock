@@ -3,7 +3,7 @@
 // 一条不可动摇的架构约定（方案第八节）：计时状态归主进程持有，
 // 窗口关掉（收进托盘）计时照样走，渲染层只读状态、发动作。
 
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, screen } from 'electron'
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, nativeTheme, screen } from 'electron'
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { jsonStore } from './store/json-store'
@@ -21,6 +21,8 @@ import { log } from './logger'
 import {
   DEFAULT_SETTINGS,
   PHASE_LABEL,
+  UI_THEME_BG,
+  resolveUiTheme,
   timerConfigOf,
   type InterruptKind,
   type Notice,
@@ -31,10 +33,20 @@ import {
 } from '../shared/types'
 import { formatAccelerator } from '../shared/format'
 
-// 必须与 src/renderer/styles/tokens.css 的 --bg 保持一致。
-// 渲染层所有颜色只允许在 tokens.css 里出现，这里是唯一的例外（窗口底色，
-// 避免无边框窗口在内容渲染前闪一下白）。改动时两处一起改。
-const WINDOW_BG = '#0E1013'
+/**
+ * 窗口底色跟主题走。
+ *
+ * 无边框窗口在内容渲染前会露出窗口底色，纸感是浅底——底色还写死深色的话，
+ * 每次启动都会先闪一下黑。所以这里按主题算，纸感用纸色、霓虹用近黑。
+ */
+function windowBgOf(settings: Settings): string {
+  const r = resolveUiTheme(
+    settings.uiTheme ?? 'paper',
+    settings.uiMode ?? 'system',
+    nativeTheme.shouldUseDarkColors
+  )
+  return UI_THEME_BG[r.theme][r.mode]
+}
 
 /** 记录卡片等不到人回应就自动落记录的时限 */
 const RECORD_AUTO_CLOSE_MS = 60_000
@@ -221,7 +233,7 @@ function createWindow(): BrowserWindow {
     minHeight: MIN_WIN_H,
     frame: false,
     show: false,
-    backgroundColor: WINDOW_BG,
+    backgroundColor: UI_THEME_BG.paper.light,
     title: '番茄钟',
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
@@ -233,6 +245,8 @@ function createWindow(): BrowserWindow {
 
   // 恢复上次窗口位置（越界则摆回屏幕内）
   void jsonStore.getSettings().then((settings) => {
+    // 窗口底色跟着主题走（纸感是浅底，别闪黑）
+    win.setBackgroundColor(windowBgOf(settings))
     const w = settings.window ?? DEFAULT_SETTINGS.window
     const area = screen.getDisplayMatching(win.getBounds()).workArea
     const x =
@@ -449,6 +463,10 @@ if (!app.requestSingleInstanceLock()) {
         }
         // 切模板/改时长后，所有窗口都要知道当前模板变了
         broadcast('settings:changed', next)
+        // 换主题要立刻换窗口底色，不然换完还有一层旧底色透出来
+        if (patch.uiTheme !== undefined || patch.uiMode !== undefined) {
+          mainWindow?.setBackgroundColor(windowBgOf(next))
+        }
         if (patch.launchAtLogin !== undefined && patch.launchAtLogin !== current.launchAtLogin) {
           try {
             app.setLoginItemSettings({
