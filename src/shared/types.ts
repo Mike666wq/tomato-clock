@@ -96,6 +96,12 @@ export type PhaseCompleteInfo = {
   task: string
   /** 这一段挂在哪个主题上（休息段为空） */
   topicId: string | null
+  /**
+   * 这一段是"跑完"还是"被跳过"（规格 C1）。
+   * false = 用户主动跳过：照旧写一条记录（completed=false），
+   * 但不响铃、不弹记录卡片、不打断用户。
+   */
+  completed: boolean
 }
 
 /** 底部状态行用的汇总 */

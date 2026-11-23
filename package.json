@@ -10,17 +10,41 @@
     "start": "electron-vite preview",
     "build": "electron-vite build",
     "dist": "node scripts/prepare-smtc.mjs && electron-vite build && electron-builder --win --x64 --publish never",
-    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json"
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
-  "build": {    "appId": "com.local.pomodoro",
+  "build": {
+    "appId": "com.local.pomodoro",
     "productName": "番茄钟",
-    "directories": { "output": "release" },
-    "files": ["out/**/*", "resources/**/*", "package.json"],
-    "extraResources": [
-      { "from": "resources", "to": "resources" },
-      { "from": "tools/smtc/publish", "to": "resources/smtc", "filter": ["**/*"] }
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "resources/**/*",
+      "package.json"
     ],
-    "win": { "icon": "resources/icon.ico", "target": ["nsis", "portable"] },
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": "resources"
+      },
+      {
+        "from": "tools/smtc/publish",
+        "to": "resources/smtc",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "icon": "resources/icon.ico",
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
@@ -40,6 +64,7 @@
     "electron-builder": "^26.18.0",
     "electron-vite": "^6.0.0",
     "typescript": "^5.9.3",
-    "vite": "^8.3.8"
+    "vite": "^8.3.8",
+    "vitest": "^5.1.1"
   }
 }

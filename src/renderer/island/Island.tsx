@@ -185,6 +185,8 @@ export default function Island(): React.JSX.Element {
   }
 
   const remaining = state ? state.remainingSec : 0
+  /** 只有专注段能写任务名（D3） */
+  const isFocus = (state?.phase ?? 'focus') === 'focus'
   const running = state?.running ?? false
   const percent = state && state.totalSec > 0 ? Math.min(100, (state.activeSec / state.totalSec) * 100) : 0
 
@@ -267,13 +269,15 @@ export default function Island(): React.JSX.Element {
           />
         ) : (
           <button
-            className="island__task"
+            className={isFocus ? 'island__task' : 'island__task island__task--off'}
             onClick={(e) => {
               e.stopPropagation()
+              // D3：休息段不许写任务名（休息段的任务没意义，还会进记录）
+              if (!isFocus) return
               startEditTask()
             }}
           >
-            {state?.task || '点这里写这一段做什么'}
+            {state?.task || (isFocus ? '点这里写这一段做什么' : '休息中')}
           </button>
         )}
 

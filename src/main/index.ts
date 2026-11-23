@@ -113,7 +113,7 @@ async function setIslandVisible(visible: boolean): Promise<void> {
   log.info(`灵动岛已${visible ? '显示' : '隐藏'}`)
 }
 
-/** 一个阶段自然跑完：落记录 + 强提醒 + 打开记录卡片 */
+/** 一个阶段自然跑完（或被跳过）：落记录 + 强提醒 + 打开记录卡片 */
 async function handlePhaseComplete(info: PhaseCompleteInfo): Promise<void> {
   // 主题：只有专注段挂主题，休息段不挂（方案第四节）
   const settings = await jsonStore.getSettings()
@@ -128,7 +128,8 @@ async function handlePhaseComplete(info: PhaseCompleteInfo): Promise<void> {
     plannedSec: info.plannedSec,
     actualSec: info.actualSec,
     pausedSec: info.pausedSec,
-    completed: true,
+    // 跳过的段记成"没完成"（规格 C1）：统计里"我试过但没做完"也看得见
+    completed: info.completed,
     task: info.task,
     interrupt: 'none',
     topicId: topicId ?? undefined,
@@ -139,6 +140,13 @@ async function handlePhaseComplete(info: PhaseCompleteInfo): Promise<void> {
   // 先落盘：用户不回应也不能丢数据
   await jsonStore.addSession(session)
   await pushSummary()
+
+  // 跳过的那一段：不响铃、不弹卡片、不把窗口抢到前台。
+  // 用户是自己跳过的，再来一套"到点提醒"是打扰。
+  if (!info.completed) {
+    log.info(`跳过了一段 ${info.phase}：已记录（未完成）`)
+    return
+  }
 
   const title = info.phase === 'focus' ? '专注结束' : `${PHASE_LABEL[info.phase]}结束`
   const body =

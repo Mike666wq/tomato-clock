@@ -14,8 +14,22 @@ import type { TimerConfig } from '../shared/presets'
 
 export type TimerAction = 'toggle' | 'start' | 'pause' | 'skip' | 'reset'
 
+/**
+ * 计时器的依赖注入点。
+ *
+ * 以前时间全部直连 `Date.now()`，于是"系统休眠两小时后唤醒"（G3）、
+ * "两个窗口同时操作"（G7）这类行为根本没法测——只能靠真的等。
+ * 现在把时钟抽出来，测试里传假时钟，时间相关的规格就能一条条断。
+ */
+export type TimerOptions = {
+  /** 当前时刻（毫秒）。默认 `Date.now` */
+  now?: () => number
+}
+
 export class Timer {
   private cfg: TimerConfig
+  /** 注入的时钟。测试里换掉它就能控制时间 */
+  private readonly now: () => number
   private phase: PhaseKind = 'focus'
   private running = false
   private endsAt: number | null = null
@@ -46,8 +60,9 @@ export class Timer {
   /** 当前这一段的任务名（灵动岛上就地编辑） */
   private segmentTask = ''
 
-  constructor(cfg: TimerConfig) {
+  constructor(cfg: TimerConfig, options: TimerOptions = {}) {
     this.cfg = cfg
+    this.now = options.now ?? ((): number => Date.now())
     this.remainingSecCached = this.phaseSec('focus')
     this.segmentTotalSec = this.remainingSecCached
     // 第一段也要挂上当前选中的主题。
@@ -55,11 +70,12 @@ export class Timer {
     // 里才被赋值，于是"每次启动应用后的第一个专注段"永远记成未分类，
     // 用户明明在设置里选着主题，跑完一看记录还是未分类。
     this.segmentTopicId = cfg.topicId
+    this.phaseStartedAt = this.now()
 
     if (import.meta.env.DEV) {
       this.devSeed = (phase?: PhaseKind, elapsedSec = 0): void => {
         if (phase) this.phase = phase
-        this.phaseStartedAt = Date.now()
+        this.phaseStartedAt = this.now()
         this.pausedMs = 0
         this.pauseStartedAt = null
         this.segmentTotalSec = this.phaseSec(this.phase)
@@ -94,6 +110,9 @@ export class Timer {
 
   /** 设置当前这一段的任务名（灵动岛就地编辑用） */
   setTask(text: string): void {
+    // D3：休息段不允许设任务名。休息段的任务没有意义，
+    // 而且会被原样写进休息段的记录里，统计时多出一堆没用的文本。
+    if (this.phase !== 'focus') return
     this.segmentTask = text
     this.emit()
   }
@@ -178,17 +197,20 @@ export class Timer {
 
   private remainingSec(): number {
     if (!this.running || this.endsAt === null) return this.remainingSecCached
-    return Math.max(0, Math.ceil((this.endsAt - Date.now()) / 1000))
+    return Math.max(0, Math.ceil((this.endsAt - this.now()) / 1000))
   }
 
   private start(): void {
     if (this.running) return
-    this.remainingSecCached = this.remainingSecCached || this.phaseSec(this.phase)
-    this.endsAt = Date.now() + this.remainingSecCached * 1000
+    // L10：剩余恰好为 0 时不能被重置成整段。
+    // 用 `=== 0` 判断"从没跑过"，而不是" falsy"——0 是 falsy，
+    // 但 0 也是一个合法的剩余值（刚到点、还没 advance）。
+    if (this.remainingSecCached === 0) this.remainingSecCached = this.segmentTotalSec
+    this.endsAt = this.now() + this.remainingSecCached * 1000
     this.running = true
     // 恢复计时：把这次暂停的时长累计进去
     if (this.pauseStartedAt !== null) {
-      this.pausedMs += Date.now() - this.pauseStartedAt
+      this.pausedMs += this.now() - this.pauseStartedAt
       this.pauseStartedAt = null
     }
     this.lastEmittedSec = -1
@@ -201,17 +223,26 @@ export class Timer {
     this.remainingSecCached = this.remainingSec()
     this.running = false
     this.endsAt = null
-    this.pauseStartedAt = Date.now()
+    this.pauseStartedAt = this.now()
     this.emit()
   }
 
+  /**
+   * 重置**当前这一段**（规格 C4/C5）。
+   *
+   * 只重置这一段：剩余回到整段、暂停累计清零、任务名清空；
+   * **阶段不变、focusRounds 不变**（不是重置整个循环）。
+   *
+   * 段长用冻结的 `segmentTotalSec`，不重新读模板：
+   * 这和 A4/A5 是一致的——运行中改时长，当前段的长度不动，
+   * 重置只是"把这一段从头再跑一遍"，不是"换一套模板"。
+   */
   private reset(): void {
     this.running = false
     this.endsAt = null
     this.pauseStartedAt = null
     this.pausedMs = 0
-    this.phaseStartedAt = Date.now()
-    this.segmentTotalSec = this.phaseSec(this.phase)
+    this.phaseStartedAt = this.now()
     this.remainingSecCached = this.segmentTotalSec
     this.segmentTopicId = this.cfg.topicId
     this.segmentTask = ''
@@ -241,19 +272,33 @@ export class Timer {
     }
   }
 
-  /** 推进到下一阶段。completed=true 表示这一段是自然跑完的 */
+  /**
+   * 推进到下一阶段。
+   *
+   * completed=true  = 这一段自然跑完
+   * completed=false = 用户跳过（规格 C1/C2）
+   */
   private advance(completed: boolean): void {
     const finished = this.phase
-    const plannedSec = this.phaseSec(finished)
-    const endedAt = Date.now()
+    // L1：段长必须用**冻结的** segmentTotalSec，不能用 phaseSec(phase)——
+    // phaseSec 读的是当前设置，而中途切过模板时这一段的长度早就被冻住了。
+    // 用错的话，"中途切模板的那个番茄"记录里的 plannedSec / actualSec 全是错的。
+    const plannedSec = this.segmentTotalSec
+    const endedAt = this.now()
 
-    if (completed) {
-      this.completed[finished] += 1
-      if (finished === 'focus') {
-        this.focusRounds += 1
+    // 跳过休息段不写记录（规格 C2）；跳过专注段要写一条 completed=false 的（规格 C1）
+    const shouldRecord = completed || finished === 'focus'
+
+    if (shouldRecord) {
+      if (completed) {
+        this.completed[finished] += 1
+        if (finished === 'focus') {
+          this.focusRounds += 1
+        }
       }
       // 实际跑起来的秒数：倒计时只在"跑"的时候走，所以
-      // 实际秒数 = 计划 - 剩余（此刻剩余已归零），暂停时间不进这个数
+      // 实际秒数 = 计划 - 剩余（此刻剩余已归零），暂停时间不进这个数。
+      // L2：这里的 plannedSec 必须是冻结的段长，否则这一步跟着一起错。
       const actualSec = Math.max(0, plannedSec - this.remainingSec())
       const pausedSec = Math.round(
         (this.pausedMs + (this.pauseStartedAt ? endedAt - this.pauseStartedAt : 0)) / 1000
@@ -266,16 +311,22 @@ export class Timer {
         startedAt: new Date(this.phaseStartedAt).toISOString(),
         endedAt: new Date(endedAt).toISOString(),
         // 任务名和主题必须在清空之前取出来：后面这段的 task 会被清掉
-        task: this.segmentTask,
-        topicId: finished === 'focus' ? this.segmentTopicId : null
+        task: finished === 'focus' ? this.segmentTask : '',
+        topicId: finished === 'focus' ? this.segmentTopicId : null,
+        // completed=false = 被跳过了，不是"跑完了"
+        completed
       }
       this.phaseListeners.forEach((fn) => fn(info))
     }
 
     // 阶段流转：专注 → (每 roundsBeforeLong 轮一次长休) 短休 → 专注
+    //
+    // 长休只由"跑完"赚来：跳过永远进短休。
+    // 否则第一段就跳过的话，focusRounds 还是 0，0 % 4 === 0 会直接给一个 15 分钟长休——
+    // "我把番茄跳过了，结果被罚休息 15 分钟"，这显然不是本意（规格 L6 / C1）。
     let next: PhaseKind = 'focus'
     if (finished === 'focus') {
-      next = this.focusRounds % this.cfg.roundsBeforeLong === 0 ? 'long' : 'short'
+      next = completed && this.focusRounds % this.cfg.roundsBeforeLong === 0 ? 'long' : 'short'
     }
 
     this.phase = next
@@ -293,7 +344,9 @@ export class Timer {
     this.remainingSecCached = this.segmentTotalSec
     this.emit()
 
-    if (this.cfg.autoStartNext) {
+    // C3：跳过之后**不自动开始**下一段，即使 autoStartNext 开着。
+    // 用户主动跳过通常是想换一件事，不该被立刻按进下一段。
+    if (completed && this.cfg.autoStartNext) {
       this.start()
     }
   }

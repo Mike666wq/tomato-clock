@@ -240,6 +240,17 @@ html[data-paused='1'] .island__clock {
   color: var(--ink);
 }
 
+/* 休息段：不能写任务名，做成不可点的样子（不是禁用灰按钮，那样太重） */
+.island__task--off {
+  color: var(--ink-2);
+  opacity: 0.6;
+  cursor: default;
+}
+
+.island__task--off:hover {
+  color: var(--ink-2);
+}
+
 .island__task-input {
   flex: 1;
   min-width: 0;
