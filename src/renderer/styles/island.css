@@ -506,7 +506,7 @@ html[data-paused='1'] .island__clock {
 .island__vol-track {
   position: relative;
   width: 100%;
-  height: var(--island-vol-track);
+  height: var(--island-vol-track-h);
   border-radius: var(--r-pill);
   background: var(--island-vol-track);
 }
@@ -525,9 +525,9 @@ html[data-paused='1'] .island__clock {
 .island__vol-thumb {
   position: absolute;
   top: 50%;
-  width: var(--island-vol-thumb);
-  height: var(--island-vol-thumb);
-  margin-left: calc(var(--island-vol-thumb) / -2);
+  width: var(--island-vol-thumb-size);
+  height: var(--island-vol-thumb-size);
+  margin-left: calc(var(--island-vol-thumb-size) / -2);
   transform: translateY(-50%);
   border-radius: 50%;
   background: var(--island-vol-thumb);

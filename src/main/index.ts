@@ -28,6 +28,7 @@ import {
   resolveUiTheme,
   timerConfigOf,
   type InterruptKind,
+  type MediaSnapshot,
   type Notice,
   type PhaseCompleteInfo,
   type RecordSummary,
@@ -659,8 +660,14 @@ if (!app.requestSingleInstanceLock()) {
       })
       // 开发期：伪造一条"正在放的歌"，用来截灵动岛音乐行的图。
       // 走的是**真实的广播通道**（media:state），不是给渲染层开后门。
+      //
+      // ⚠ 假状态会**留在主进程里**：helper 推来的空 state（没开音乐软件时）
+      //   不再把它清掉 —— 不然音乐行每被清一次，音量滑条那个 DOM 节点就重建一次，
+      //   绑在它上面的事件监听全丢（实测：按下能生效、拖动收不到 move）。
       ipcMain.handle('media:dev-fake', (_e, state: unknown) => {
-        broadcast('media:state', state)
+        const fake = state as MediaSnapshot | null
+        music?.setDevState(fake)
+        broadcast('media:state', fake)
         return true
       })
       // 开发期：正常退出（= app.quit，会走 before-quit 落盘）。

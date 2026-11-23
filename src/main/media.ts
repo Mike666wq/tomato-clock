@@ -40,6 +40,8 @@ export type MusicController = {
   getState(): MediaSnapshot | null
   /** 发控制命令 */
   command(cmd: MediaCommand): void
+  /** 开发期：伪造一条"正在放歌"的状态（截图/测量用；打包产物里没有这个口子） */
+  setDevState(state: MediaSnapshot | null): void
   /** 当前系统主音量（0-100）；null = 拿不到 */
   getVolume(): number | null
   /** 设系统主音量（0-100）；**界面会立刻本地更新**，不等子进程回读 */
@@ -82,6 +84,22 @@ export function createMusicController(onChange: (state: MediaSnapshot | null) =>
   let restartTimer: NodeJS.Timeout | null = null
   let buffer = ''
   let pendingTimer: NodeJS.Timeout | null = null
+  /**
+   * 音量**独立于媒体状态**单独记一份。
+   *
+   * 以前它挂在 MediaSnapshot 里，可"没有音乐会话"时整个状态是 null，
+   * 音量也就跟着读不到了 —— 而音量是系统级的，跟有没有歌在放没关系。
+   */
+  let volume: number | null = null
+  let volumeOk = false
+  /**
+   * 开发期的"假状态"（截图/测量时伪造一条正在放歌）。
+   *
+   * 有它的时候，helper 推来的**空 state 不该把界面清掉** ——
+   * 不然界面每被清一次，音量滑条那个 DOM 节点就重建一次，
+   * 绑在它上面的事件监听全丢（实测踩过：按下能生效、拖动收不到 move）。
+   */
+  let devFake: MediaSnapshot | null = null
 
   const setState = (next: MediaSnapshot | null): void => {
     const same =
@@ -198,13 +216,16 @@ export function createMusicController(onChange: (state: MediaSnapshot | null) =>
       const artist = String(parsed['artist'] ?? '')
       const source = String(parsed['source'] ?? '')
       const playing = Boolean(parsed['playing'])
-      const volume = Number(parsed['volume'] ?? 0)
-      const volumeOk = Boolean(parsed['volumeOk'])
+      const volumeValue = Number(parsed['volume'] ?? 0)
+      const volumeValueOk = Boolean(parsed['volumeOk'])
+      volume = volumeValue
+      volumeOk = volumeValueOk
       // 真实状态回来了 → 过渡态结束
       clearPending()
       if (!title && !artist) {
         // 没有媒体在放：整行藏掉
-        setState(null)
+        // （开发期的假状态除外：它在的时候别把它清掉）
+        if (!devFake) setState(null)
       } else {
         setState({ source, title, artist, playing, volume, volumeOk, pending: '' })
       }
@@ -214,6 +235,8 @@ export function createMusicController(onChange: (state: MediaSnapshot | null) =>
       // 音量变了（外部按了音量键，或我们自己设的）
       const ok = Boolean(parsed['ok'])
       const value = Number(parsed['value'] ?? 0)
+      volume = value
+      volumeOk = ok
       if (!state) return
       setState({ ...state, volume: value, volumeOk: ok })
       return
@@ -268,12 +291,20 @@ export function createMusicController(onChange: (state: MediaSnapshot | null) =>
         log.warn(`发音乐命令失败: ${(err as Error).message}`)
       }
     },
+    setDevState(state: MediaSnapshot | null): void {
+      devFake = state
+      if (state) setState({ ...state, pending: '' })
+      else setState(null)
+    },
     getVolume(): number | null {
-      if (!state || !state.volumeOk) return null
-      return state.volume
+      return volumeOk ? volume : null
     },
     setVolume(percent: number): void {
       const v = Math.max(0, Math.min(100, Math.round(percent)))
+      log.info(`设系统音量：${v}%`)
+      // 音量是系统级的，跟有没有歌在放无关 —— 状态为 null 也要记
+      volume = v
+      volumeOk = true
       // **界面先本地更新**：拖滑条时要跟手，不能等子进程回读
       if (state) setState({ ...state, volume: v })
       if (!child || !child.stdin || child.stdin.destroyed) return

@@ -60,7 +60,9 @@
   --island-music-gap: 6px;
   --island-music-btn: 28px;
   /* 音量滑条（v0.3.6）：轨道 4px、拇指 12px。
-     尺寸与主题无关，放这里；颜色去 themes/*.css 的 --island-vol-*。 */
-  --island-vol-track: 4px;
-  --island-vol-thumb: 12px;
+     尺寸与主题无关，放这里；颜色去 themes/*.css 的 --island-vol-*。
+     ⚠ 尺寸变量名必须带尺寸后缀：颜色那边也叫 --island-vol-track / --island-vol-thumb，
+     同名会被主题文件覆盖掉 —— 轨道高度和拇指尺寸实测都变成了 0。 */
+  --island-vol-track-h: 4px;
+  --island-vol-thumb-size: 12px;
 }
