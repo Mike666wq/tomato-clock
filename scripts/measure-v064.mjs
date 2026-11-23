@@ -136,7 +136,11 @@ const SESSIONS = [
   at(16, 0, 300, { completed: false, actualSec: 300, plannedSec: 1500 }),
   // 第二个主题（验纸感下两个主题的色块能互相区分）
   at(10, 0, 2700, { topicId: 'topic-deep', topicNameSnapshot: '深度工作' }),
-  at(12, 0, 2700, { topicId: 'topic-deep', topicNameSnapshot: '深度工作', task: '改那个 bug' })
+  at(12, 0, 2700, { topicId: 'topic-deep', topicNameSnapshot: '深度工作', task: '改那个 bug' }),
+  // **只有 2 分钟**的段 —— 真实宽度 = (2/60)*16.667 = 0.556 单位，
+  // 不足最小可见宽 1.2 → 会被兜底画成 1.2。
+  // 这条专门用来锁住「1.2 ≠ 真实比例，浮层里的数字才是真相」。
+  at(17, 0, 120)
 ]
 
 async function applySettings(over) {
@@ -558,6 +562,64 @@ if (!segBox) {
   await sleep(300)
   const gone = await evaluate(main, `!document.querySelector('.timeline__tip')`)
   check('G4 鼠标移开浮层消失', gone === true, `移开后浮层还在 = ${gone === true ? '否' : '是'}`)
+}
+
+// ---------- G5. 最小可见宽 1.2 ≠ 真实比例 ----------
+// 肥鱼定的口径（不许改回去）：
+//   1.2 单位只是**视觉兜底**，短段的绘制宽度不等于真实比例；
+//   **浮层里的数字是唯一真相**，不许拿块宽反推时长。
+//
+// 验两件事：
+//   ① 2 分钟那段确实被兜底画成 1.2 单位（真实宽只有 0.556）
+//   ② 但它浮层里报的是 **2 分钟**（真实 actualSec），
+//      而不是按 1.2 单位折算出来的 4 分钟
+const shortInfo = await evaluate(
+  main,
+  `(() => {
+    const seg = [...document.querySelectorAll('.timeline__seg')].find(r => {
+      const t = r.parentElement.querySelector('title')?.textContent ?? ''
+      return t.includes('17:00')
+    })
+    if (!seg) return null
+    const r = seg.getBoundingClientRect()
+    return {
+      w: Number(seg.getAttribute('width')),
+      x: r.x + r.width / 2,
+      y: r.y + r.height / 2
+    }
+  })()`
+)
+if (!shortInfo) {
+  check('G5 取得到短段', false, '没找到 17:00 那条 2 分钟的段')
+} else {
+  check(
+    'G5 短段被兜底画成最小可见宽 1.2 单位（真实宽只有 0.556）',
+    Math.abs(shortInfo.w - 1.2) < 0.001,
+    `绘制宽度 w=${shortInfo.w}，真实宽期望 1.2（2 分钟的真实宽是 0.556）`
+  )
+  // 悬停它，看浮层报的是不是真实时长
+  await send(main, 'Input.dispatchMouseEvent', { type: 'mouseMoved', x: 5, y: 5 })
+  await sleep(200)
+  await send(main, 'Input.dispatchMouseEvent', {
+    type: 'mouseMoved',
+    x: Math.round(shortInfo.x),
+    y: Math.round(shortInfo.y)
+  })
+  await sleep(400)
+  const shortTip = await evaluate(
+    main,
+    `(() => {
+      const tip = document.querySelector('.timeline__tip')
+      if (!tip) return null
+      return tip.querySelector('.timeline__tip-dur')?.textContent ?? ''
+    })()`
+  )
+  const byWidthWouldBe = Math.round((1.2 / (timeline.W / 24)) * 60) // 按兜底宽折算
+  check(
+    'G5 短段浮层报的是真实时长（2 分钟），不是按兜底宽折算的分钟数',
+    shortTip !== null && shortTip.includes('2 分钟') && !shortTip.includes(`${byWidthWouldBe} 分钟`),
+    `浮层时长="${shortTip}"（真实 2 分钟；按 1.2 单位折算会是 ${byWidthWouldBe} 分钟）`
+  )
 }
 
 // ---------- 汇总 ----------

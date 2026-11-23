@@ -42,7 +42,17 @@ const TL = {
   labelY: 60,
   /** 画布高 */
   h: 66,
-  /** 块最小可见宽度（太短的段否则看不见） */
+  /**
+   * 块最小可见宽度（太短的段否则看不见）。
+   *
+   * ⚠ **1.2 单位 ≠ 真实比例**（肥鱼定的口径，别改回去）：
+   * 这是一层**视觉兜底** —— 真实宽度不足 1.2 单位（≈ 4 分钟）的段，
+   * 会被画得比实际宽。
+   *
+   * 所以：**真实时长以 hover 浮层里的数字为唯一真相**，
+   * 不许拿块的宽度反推时长，也不许拿宽度做比例换算。
+   * 24 小时的轴上，短段本来就画不出比例 —— 比例不是这张图要表达的东西。
+   */
   minW: 1.2,
   /**
    * 块内写时长的门槛：**45 分钟**（肥鱼定的）。
@@ -205,6 +215,11 @@ function TimelineChart({ data }: { data: TimelineEntry[] }): React.JSX.Element {
         >
           <div className="timeline__tip-time">
             {fmtTime(hover.e.startedAt)} – {fmtTime(hover.e.endedAt)}
+            {/*
+              这里的分钟数是 **actualSec 算出来的真实时长**，
+              不是从块的宽度反推的 —— 短段有最小可见宽兜底，
+              宽度不等于比例。**浮层里的数字是唯一真相。**
+            */}
             <span className="timeline__tip-dur">{minutes(hover.e.actualSec)} 分钟</span>
           </div>
           <div className="timeline__tip-topic">
