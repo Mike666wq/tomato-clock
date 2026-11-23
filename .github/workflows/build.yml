@@ -104,6 +104,26 @@ jobs:
       # 两次构建就把额度撑满，之后上传会失败——而上传失败会让整个 job 失败，
       # 连后面的 Release 都建不出来。包一律走 Release，Release 附件不占这份额度。
       #
+      # latest-build 是滚动预发布，附件名带版本号，所以新版本不会覆盖旧版本，
+      # 而是一层层堆上去（0.2.3 和 0.3.0 的包会同时挂着）。用户点进去可能下到旧的，
+      # 所以每次发布前先把旧附件清掉。
+      - name: 清掉 latest-build 里的旧附件
+        if: success() && github.ref == 'refs/heads/master'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view latest-build >/dev/null 2>&1; then
+            gh release view latest-build --json assets --jq '.assets[].name' | while read -r name; do
+              if [ -n "$name" ]; then
+                echo "删除旧附件: $name"
+                gh release delete-asset latest-build "$name" --yes || true
+              fi
+            done
+          else
+            echo "还没有 latest-build，跳过"
+          fi
+
       # master 推送 → 更新一个滚动的「最新构建」预发布版，随时能下到最新的包
       - name: 发布最新构建（master）
         if: success() && github.ref == 'refs/heads/master'
