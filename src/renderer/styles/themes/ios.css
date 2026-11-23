@@ -29,6 +29,10 @@
   --hover: rgba(120, 120, 128, 0.16);
   --active: rgba(120, 120, 128, 0.24);
   --app-bg: var(--bg);
+  /* 「＋ 主题」的虚线框。
+     按 --ink 混 45%：系统感深浅两档的 --ink 正好一黑一白，
+     同一档值在两档里都够（实测浅色档 3.4:1、深色档 4.1:1）。 */
+  --dashed-edge: color-mix(in srgb, var(--ink) 45%, transparent);
 
   /* ---------- 形状：大圆角 ---------- */
   --r-sm: 10px;
@@ -207,6 +211,13 @@
   background: var(--phase);
   color: #ffffff;
   border-color: transparent;
+}
+
+/* 「＋ 主题」：提示性入口，跟别的药丸不一样（虚线）。
+   上面那条 .topics__chip 的规则是 border: none，
+   虚线得在这里重新声明。 */
+:root[data-theme='ios'] .topics__chip--add {
+  border: 1px dashed var(--dashed-edge);
 }
 
 /* 卡片：大圆角 + 柔和阴影 */

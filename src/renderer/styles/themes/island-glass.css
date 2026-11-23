@@ -34,7 +34,7 @@
   --island-w: 172px;
   --island-h: 34px;
   --island-h-expanded: 92px;
-  --island-h-expanded-music: 126px; /* 展开态且显示了音乐控制那一行（音乐行 34px） */
+  --island-h-expanded-music: 134px; /* 展开态且显示了音乐控制那一行（音乐行 42px） */
   --island-radius: 17px; /* 收起态下沿做半圆（半高 17px），最像灵动岛 */
   --island-radius-expanded: 20px; /* 展开态半高 38px 太大，像面包 */
   --island-side-pad: 8px;
@@ -53,8 +53,10 @@
   --island-bar-inset: 18px;
   --island-bar-bottom: 8px;
   --island-track: color-mix(in srgb, var(--ink) 12%, transparent);
-  /* 音乐控制行（v0.2.2，v0.6 重做：行高 34、按钮 28×28） */
-  --island-music-h: 34px;
+  /* 音乐控制行（v0.2.2，v0.6 重做：行高 34、按钮 28×28）
+     v0.6.3：顶部加了一条 1px 分隔线 + 6px 上内边距，
+     所以行高 34 → 42（内容区仍放得下 28px 的按钮）。 */
+  --island-music-h: 42px;
   --island-music-gap: 6px;
   --island-music-btn: 28px;
 }

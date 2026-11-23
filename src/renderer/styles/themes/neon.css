@@ -33,6 +33,10 @@
   --hover: rgba(255, 255, 255, 0.06);
   --active: rgba(255, 255, 255, 0.1);
   --app-bg: radial-gradient(circle at 50% 28%, #1a0e14, #08090b 70%), var(--bg);
+  /* 「＋ 主题」的虚线框：霓虹下要能看见那道虚线。
+     按 --ink（这个主题里恒定是浅色）混 45%：实测对比度 3.6:1。
+     之前拿 --ink-2 混只有 2.73:1，看不清框在哪。 */
+  --dashed-edge: color-mix(in srgb, var(--ink) 45%, transparent);
 
   /* ---------- 形状：玻璃胶囊 ---------- */
   --r-sm: 12px;
@@ -149,6 +153,14 @@
   background: color-mix(in srgb, var(--phase) 10%, transparent);
   border-color: color-mix(in srgb, var(--phase) 55%, transparent);
   box-shadow: 0 0 16px color-mix(in srgb, var(--phase) 22%, transparent);
+}
+
+/* 「＋ 主题」：提示性入口，跟别的胶囊不一样（虚线）。
+   上面那条 .topics__chip 的规则是 border: 1px solid，
+   那个 border-style 会盖掉 app.css 里的 dashed —— 虚线得在这里重新声明。 */
+:root[data-theme='neon'] .topics__chip--add {
+  border-style: dashed;
+  border-color: var(--dashed-edge);
 }
 
 /* 时长不在界面上写：切模板时你看的是"哪个"，不是"多少分钟" */

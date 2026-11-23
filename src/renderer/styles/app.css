@@ -297,7 +297,13 @@ button {
 .main--page {
   align-items: stretch;
   overflow-y: auto;
-  padding: 16px var(--pad-x) 12px;
+  /* 底部留白 = 导航栏高度 + 24px。
+     以前写死 12px，滚到底时最后一张卡的下边缘直接压在导航栏上，
+     看着像被切掉一块。
+     导航栏高度三套主题不一样（纸感 ~37、霓虹 50、系统感 54），
+     所以不写死：由 App.tsx 用 ResizeObserver 量出来写进 --nav-h。
+     兜底 56px 是最矮那套主题的上限。 */
+  padding: 16px var(--pad-x) calc(var(--nav-h, 56px) + 24px);
   gap: 12px;
 }
 
@@ -1152,11 +1158,13 @@ button {
 }
 
 /* 「＋ 主题」：不是选项，是"这儿可以建一个"的入口。
-   虚线描边 + --ink-3，比正常胶囊窄一点 —— 它是提示，不该抢戏 */
+   虚线描边 + --ink-3，比正常胶囊窄一点 —— 它是提示，不该抢戏。
+   虚线颜色走 --dashed-edge（每套主题自己定），
+   纸感下原来那档太淡，几乎看不出框在哪。 */
 .topics__chip--add {
   color: var(--ink-3);
   border-style: dashed;
-  border-color: color-mix(in srgb, var(--ink-3) 55%, transparent);
+  border-color: var(--dashed-edge);
   padding: 0 10px;
 }
 
@@ -1389,6 +1397,9 @@ button {
 .topic-bar__fill {
   height: 100%;
   border-radius: var(--r-pill);
+  /* 默认就是主题原色；主题层可以改这条横条的呈现方式
+     （纸感下改成"墨色打底 + 一点主题色"，免得跟暖白+砖红打架） */
+  background: var(--topic-color);
 }
 
 .topic-bar__meta {

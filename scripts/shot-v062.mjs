@@ -21,6 +21,8 @@ const port = process.env.CDP_PORT ?? '9222'
 const projectRoot = process.cwd()
 const userData = process.env.E2E_DATA ?? path.join(projectRoot, '.tmp', 'shot', 'data.json')
 const outDir = path.join(projectRoot, 'docs', 'shots')
+/** 图名前缀：v062 / v063 …… 每一轮换一轮，别覆盖上一轮的图 */
+const PREFIX = process.env.SHOT_PREFIX ?? 'v062'
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 // ---------- CDP ----------
@@ -245,8 +247,21 @@ for (const [name, label] of [
   writeSessions(name)
   await gotoStats()
   await clearToast()
-  await shot(main, path.join(outDir, `v062-统计页-${label}.png`), true)
+  await shot(main, path.join(outDir, `${PREFIX}-统计页-${label}.png`), true)
 }
+
+console.log('# 计时页：主题行的「＋ 主题」虚线框')
+// 虚线框太淡是纸感下的老问题，改完要能看出来"框在哪"。
+// 这里拍计时页（主题行在计时页，不在统计页）。
+for (const theme of ['paper', 'neon', 'ios']) {
+  await applySettings({ uiTheme: theme })
+  await evaluate(main, "document.querySelectorAll('.nav__item')[0]?.click()")
+  await sleep(800)
+  await clearToast()
+  const name = { paper: '纸感', neon: '霓虹', ios: '系统感' }[theme]
+  await shot(main, path.join(outDir, `${PREFIX}-计时页-加主题-${name}.png`))
+}
+await applySettings({ uiTheme: 'paper' })
 
 console.log('# 三套主题下的统计页')
 writeSessions('full')
@@ -255,7 +270,7 @@ for (const theme of ['paper', 'neon', 'ios']) {
   await gotoStats()
   await clearToast()
   const name = { paper: '纸感', neon: '霓虹', ios: '系统感' }[theme]
-  await shot(main, path.join(outDir, `v062-统计页-${name}.png`), true)
+  await shot(main, path.join(outDir, `${PREFIX}-统计页-${name}.png`), true)
 }
 await applySettings({ uiTheme: 'paper' })
 
@@ -274,13 +289,13 @@ if (island) {
   // ① 没选主题 → 显示「＋ 主题」
   await applySettings({ activeTopicId: null })
   await hover()
-  await shot(island, path.join(outDir, 'v062-灵动岛-没有主题.png'))
+  await shot(island, path.join(outDir, `${PREFIX}-灵动岛-没有主题.png`))
 
   // ② 选了主题
   await applySettings({ activeTopicId: 'topic-deep' })
   await sleep(400)
   await hover()
-  await shot(island, path.join(outDir, 'v062-灵动岛-有主题.png'))
+  await shot(island, path.join(outDir, `${PREFIX}-灵动岛-有主题.png`))
 
   // ③ 音乐行：播放中 / 暂停 / 长歌名截断
   await applySettings({ showMusicControl: true })
@@ -290,10 +305,10 @@ if (island) {
     await hover()
   }
   await fake({ source: 'QQMusic', title: '夏日约定', artist: 'JINBAO', playing: true })
-  await shot(island, path.join(outDir, 'v062-灵动岛-音乐-播放中.png'))
+  await shot(island, path.join(outDir, `${PREFIX}-灵动岛-音乐-播放中.png`))
 
   await fake({ source: 'QQMusic', title: '夏日约定', artist: 'JINBAO', playing: false })
-  await shot(island, path.join(outDir, 'v062-灵动岛-音乐-暂停.png'))
+  await shot(island, path.join(outDir, `${PREFIX}-灵动岛-音乐-暂停.png`))
 
   await fake({
     source: 'QQMusic',
@@ -301,8 +316,10 @@ if (island) {
     artist: 'JINBAO',
     playing: true
   })
-  await shot(island, path.join(outDir, 'v062-灵动岛-音乐-长歌名截断.png'))
+  await shot(island, path.join(outDir, `${PREFIX}-灵动岛-音乐-长歌名截断.png`))
 }
 
 console.log('# done')
 process.exit(0)
+
+

@@ -170,9 +170,17 @@ function TopicBars({ data }: { data: TopicStat[] }): React.JSX.Element {
             <span className="topic-bar__share">{Math.round(d.share * 100)}%</span>
           </div>
           <div className="topic-bar__track">
+            {/* 主题色不直接写进 background，而是塞进 --topic-color：
+                主题层可以决定"这条横条长什么样"（纸感下改成墨色打底 + 一点主题色），
+                组件里不写死配色。色点那个圆点保留用户选的原色。 */}
             <div
               className="topic-bar__fill"
-              style={{ width: `${(d.totalSec / max) * 100}%`, background: d.color }}
+              style={
+                {
+                  width: `${(d.totalSec / max) * 100}%`,
+                  '--topic-color': d.color
+                } as React.CSSProperties
+              }
             />
           </div>
           <div className="topic-bar__meta">

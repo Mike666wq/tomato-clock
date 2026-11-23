@@ -434,15 +434,13 @@ export default function Island(): React.JSX.Element {
         <span className="island__music">
           <span className="island__music-note">♪</span>
           {/* key 跟着歌名走：换歌时这一段重新挂载，淡入动画重放（120ms，不闪）。
-              歌名和歌手分成两个元素：歌名太长时省略，歌手永远留着 */}
+              歌名和歌手分成两个元素：**歌名左对齐、歌手右对齐**，中间留白。
+              以前是「歌名 - 歌手」拼在一段文字里，长歌名截断后省略号后面紧跟一个
+              " - "，读起来像省略号里还藏了半句话。
+              分成两块之后，歌手那一块永远不会被歌名的省略号污染。 */}
           <span className="island__music-text" key={`${media.title}|${media.artist}`}>
             <span className="island__music-title">{media.title}</span>
-            {media.artist ? (
-              <>
-                <span className="island__music-sep">-</span>
-                <span className="island__music-artist">{media.artist}</span>
-              </>
-            ) : null}
+            {media.artist ? <span className="island__music-artist">{media.artist}</span> : null}
           </span>
           <span className="island__music-actions">
             <button

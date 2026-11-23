@@ -41,6 +41,34 @@ export default function App(): React.JSX.Element {
   const [section, setSection] = useState<string | null>(null)
   const noticeTimer = useRef<number | null>(null)
 
+  /**
+   * 导航栏高度实测注入 CSS 变量。
+   *
+   * 统计页最后一张卡贴着导航栏、被切掉，根因是滚动容器的底部留白
+   * 写死成了一个拍脑袋的数，而导航栏在三套主题下高度不一样
+   * （纸感约 36、霓虹 50、系统感 54，还各带不同的外边距）。
+   *
+   * 所以这里不写死：量出导航栏的实际高度，写进 --nav-h，
+   * 样式层用 calc(var(--nav-h) + 24px) 算底部留白。
+   *
+   * **不许目测**（肥鱼立的规矩）：这个数是量出来的，不是看截图估的。
+   */
+  useEffect(() => {
+    const nav = document.querySelector('.nav')
+    if (!nav) return
+    const update = (): void => {
+      const h = nav.getBoundingClientRect().height
+      // 兜底 56px：纸感的导航最矮（约 37px），但留白按最矮那套的下限算也不亏，
+      // 免得切主题时底下那块留白忽然一缩。
+      document.documentElement.style.setProperty('--nav-h', `${Math.max(56, Math.round(h))}px`)
+    }
+    update()
+    // 换主题会改导航栏高度（霓虹 50、系统感 54），所以要盯着
+    const ro = new ResizeObserver(update)
+    ro.observe(nav)
+    return () => ro.disconnect()
+  }, [page])
+
   // 主题/深浅写到 html 根元素上（颜色、圆角、字体全在主题文件里）
   useTheme(settings)
 

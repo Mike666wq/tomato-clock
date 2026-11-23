@@ -355,12 +355,14 @@ html[data-paused='1'] .island__clock {
 }
 
 /* 「＋ 主题」：不是选项，是"这里可以建一个"的入口。
-   虚线描边 + --ink-3，比正常胶囊窄一点 —— 它是提示，不该抢戏 */
+   虚线描边 + --ink-3，比正常胶囊窄一点 —— 它是提示，不该抢戏。
+   虚线的颜色走 --dashed-edge（每套主题自己定），
+   纸感下原来的 30% 太淡，几乎看不出框在哪。 */
 .island__val--add,
 .island__opt--add {
   color: var(--ink-3);
   border-style: dashed;
-  border-color: color-mix(in srgb, var(--ink-3) 55%, transparent);
+  border-color: var(--dashed-edge);
   padding: 0 8px;
 }
 
@@ -384,6 +386,12 @@ html[data-paused='1'] .island__clock {
   /* 跟上面的当前值胶囊左边对齐（胶囊自己带 9px 内边距） */
   margin-left: calc(var(--island-pad-x) - var(--island-chip-pad));
   min-width: 0;
+  /* 音乐行和上面之间一条 1px 极淡分隔线（--line 的 60%）。
+     没有这条线，音乐行和岛底同色，看着像"上面那几行多长了两行字"；
+     有了它才像一条独立的控制栏。 */
+  border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+  padding-top: 6px;
+  box-sizing: border-box;
 }
 
 .island__music-note {
@@ -393,15 +401,18 @@ html[data-paused='1'] .island__clock {
   color: var(--ink-3);
 }
 
-/* 歌名和歌手分成两个元素：
-   歌名可以截断，歌手必须留着 —— 一整段 text-overflow 会把歌手吃掉，
-   而"谁唱的"往往比歌名更重要。 */
+/* 歌名和歌手分成两块：**歌名左对齐、歌手右对齐**，中间留白。
+   以前是「歌名 - 歌手」挤在一段文字里，长歌名截断后是
+   "夏日约定（Live版 · … - JINBAO"——省略号后面紧跟一个 " - "，
+   读起来像省略号里还藏了半句话。
+   分成两块之后，歌手那一块永远不会被歌名的省略号污染。 */
 .island__music-text {
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
   align-items: baseline;
-  gap: 4px;
+  justify-content: space-between;
+  gap: 12px;
   /* 换歌时淡入 120ms：key 变了这一段会重新挂载，动画跟着重放 */
   animation: island-music-in 120ms ease-out;
 }
@@ -415,7 +426,9 @@ html[data-paused='1'] .island__clock {
   }
 }
 
+/* 歌名：占了左边所有余量，太长就省略 */
 .island__music-title {
+  flex: 1 1 auto;
   min-width: 0;
   font-size: 13px;
   color: var(--ink);
@@ -424,17 +437,21 @@ html[data-paused='1'] .island__clock {
   text-overflow: ellipsis;
 }
 
-.island__music-sep {
-  flex: none;
-  font-size: 12px;
-  color: var(--ink-3);
-}
-
+/* 歌手：靠右，永远不被歌名挤走。
+   flex-shrink 必须是 0 —— 歌名很长的时候它会占满整行，
+   如果歌手也参与收缩，两者按各自的内容宽度分摊缩量，
+   结果 "JINBAO" 被压成 25px 还要再省略一次（实测过）。
+   宁可让歌名全截光，歌手也要完整。
+   极长的歌手名由 max-width 兜住，超出部分自己省略。 */
 .island__music-artist {
-  flex: none;
+  flex: 0 0 auto;
+  max-width: 46%;
   font-size: 12px;
   color: var(--ink-3);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: right;
 }
 
 .island__music-actions {
