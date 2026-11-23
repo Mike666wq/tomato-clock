@@ -568,6 +568,89 @@ button {
   font-family: var(--font-ui);
 }
 
+/* 详情浮层：块里塞不下这些信息，全部走这里。
+   位置跟着悬停的那一段（百分比定位，不受 viewBox 缩放影响）。 */
+.timeline {
+  position: relative;
+}
+
+.timeline__tip {
+  position: absolute;
+  top: -4px;
+  z-index: 5;
+  min-width: 132px;
+  padding: 7px 9px;
+  font-size: var(--fs-tiny);
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow-card, 0 8px 24px color-mix(in srgb, var(--bg) 60%, transparent));
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* 锚点：默认居中（在块上方），靠边时改成靠左/靠右，
+   否则浮层会跑出卡片被裁掉。
+   用 data-anchor 而不是内联样式 —— 内联样式的匹配太脆。 */
+.timeline__tip {
+  transform: translateX(-50%);
+}
+
+.timeline__tip[data-anchor='left'] {
+  transform: translateX(0);
+}
+
+.timeline__tip[data-anchor='right'] {
+  transform: translateX(-100%);
+}
+
+.timeline__tip-time {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline__tip-dur {
+  font-size: 10px;
+  color: var(--ink-2);
+}
+
+.timeline__tip-topic {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 3px;
+  color: var(--ink-2);
+}
+
+.timeline__tip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.timeline__tip-task {
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 130px;
+  /* 主题名和任务名之间要留缝，不然挤成"操作系统复习看教材" */
+  padding-left: 6px;
+  margin-left: 2px;
+  border-left: 1px solid var(--line);
+}
+
+/* 没跑完的段：浮层里标出来 */
+.timeline__tip-flag {
+  margin-top: 3px;
+  font-size: 10px;
+  color: var(--warn);
+}
+
 /* ---------- 设置 ---------- */
 
 .field {

@@ -208,6 +208,116 @@ for (const theme of ['neon', 'ios']) {
   await shot(main, path.join(outDir, `${PREFIX}-统计页-今日时间线-${name}.png`), true)
 }
 await applySettings({ uiTheme: 'paper' })
+await gotoStats()
+await clearToast()
+
+console.log('# hover 浮层')
+// 用真实鼠标事件（React 的 onMouseEnter 不吃合成事件）
+const segBox = await evaluate(
+  main,
+  `(() => {
+    const seg = [...document.querySelectorAll('.timeline__seg')].find(r => {
+      const t = r.parentElement.querySelector('title')?.textContent ?? ''
+      return t.includes('00:34')
+    })
+    if (!seg) return null
+    const r = seg.getBoundingClientRect()
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
+  })()`
+)
+if (segBox) {
+  await send(main, 'Input.dispatchMouseEvent', { type: 'mouseMoved', x: 5, y: 5 })
+  await sleep(200)
+  await send(main, 'Input.dispatchMouseEvent', {
+    type: 'mouseMoved',
+    x: Math.round(segBox.x),
+    y: Math.round(segBox.y)
+  })
+  await sleep(500)
+  await shot(main, path.join(outDir, `${PREFIX}-今日时间线-hover浮层.png`), true)
+} else {
+  console.log('# 没找到 00:34 的段，跳过 hover 图')
+}
+
+console.log('# 00:34 那段的特写')
+// 只截时间线这一小块，看清 25 分钟的块在 0 点右边一点点。
+//
+// **按那一段的实际位置裁**，不按"左半边"裁 ——
+// 25 分钟的块在 400 单位宽的轴上只有 6.9 单位，
+// 按左半边裁会拍到一堆别的段，看不到要看的那个。
+await evaluate(
+  main,
+  `(() => {
+    const svg = document.querySelector('.chart--timeline')
+    if (!svg) return
+    const seg = [...svg.querySelectorAll('.timeline__seg')].find(r => {
+      const t = r.parentElement.querySelector('title')?.textContent ?? ''
+      return t.includes('00:34')
+    })
+    const sr = svg.getBoundingClientRect()
+    const vr = svg.viewBox.baseVal
+    let cx = sr.x
+    let cw = 120
+    if (seg) {
+      const x = Number(seg.getAttribute('x'))
+      const w = Number(seg.getAttribute('width'))
+      // 换算成屏幕坐标：viewBox → 实际像素
+      const scale = sr.width / vr.width
+      cx = sr.x + (x - 14) * scale
+      cw = (w + 28) * scale
+    }
+    window.__tlClip = { x: cx, y: sr.y, width: cw, height: sr.height }
+  })()`
+)
+const tlClip = await evaluate(main, 'JSON.stringify(window.__tlClip)')
+if (tlClip && tlClip !== 'undefined') {
+  const r = JSON.parse(tlClip)
+  await send(main, 'Emulation.setDeviceMetricsOverride', {
+    width: 480,
+    height: 1240,
+    deviceScaleFactor: 2,
+    mobile: false
+  })
+  await sleep(500)
+  // 覆盖后再量一次（视口变了，位置会变）
+  const r2 = JSON.parse(
+    await evaluate(
+      main,
+      `(() => {
+        const svg = document.querySelector('.chart--timeline')
+        const seg = [...svg.querySelectorAll('.timeline__seg')].find(r => {
+          const t = r.parentElement.querySelector('title')?.textContent ?? ''
+          return t.includes('00:34')
+        })
+        const sr = svg.getBoundingClientRect()
+        const vr = svg.viewBox.baseVal
+        const scale = sr.width / vr.width
+        const x = seg ? Number(seg.getAttribute('x')) : 0
+        const w = seg ? Number(seg.getAttribute('width')) : 6
+        return JSON.stringify({
+          x: sr.x + (x - 16) * scale,
+          y: sr.y,
+          width: (w + 32) * scale,
+          height: sr.height
+        })
+      })()`
+    )
+  )
+  const cap = await send(main, 'Page.captureScreenshot', {
+    format: 'png',
+    clip: { ...r2, scale: 3 }
+  })
+  mkdirSync(path.join(outDir), { recursive: true })
+  writeFileSync(
+    path.join(outDir, `${PREFIX}-今日时间线-0034特写.png`),
+    Buffer.from(cap.data, 'base64')
+  )
+  console.log(`# saved ${PREFIX}-今日时间线-0034特写.png`)
+  await send(main, 'Emulation.clearDeviceMetricsOverride')
+  await sleep(300)
+} else {
+  console.log('# 没量到时间线位置，跳过特写')
+}
 
 console.log('# 空态')
 writeSessions([])

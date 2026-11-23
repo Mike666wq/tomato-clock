@@ -44,10 +44,21 @@ const TL = {
   h: 66,
   /** 块最小可见宽度（太短的段否则看不见） */
   minW: 1.2,
-  /** 块内写时长所需的最小宽度 */
-  textW: 13,
-  /** 写"25 分"所需的最小宽度 */
-  textWFull: 26
+  /**
+   * 块内写时长的门槛：**45 分钟**（肥鱼定的）。
+   *
+   * 24 小时的轴上一个槽才 16.7px，45 分钟也只有 12.5px ——
+   * 再小就成噪声了，宁可不写。
+   *
+   * **其余信息（起止、时长、主题、任务名）全部走 hover 浮层**，
+   * 不靠块内那点空间硬塞。
+   *
+   * 门槛按**分钟数**判，不按像素判 —— 像素宽度会随画布缩放漂移，
+   * 按分钟判才是"这一段到底有没有 45 分钟"这个事实。
+   */
+  textMinMinutes: 45,
+  /** 写"25 分"（带单位）需要的分钟数门槛 */
+  textMinMinutesFull: 90
 } as const
 
 function minutes(sec: number): number {
@@ -70,62 +81,73 @@ function TimelineChart({ data }: { data: TimelineEntry[] }): React.JSX.Element {
   const now = new Date()
   const nowMin = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60
   const nowX = timeToX(nowMin, slot)
+  // 悬停中的那一段：详情浮层跟着它
+  const [hover, setHover] = useState<{ e: TimelineEntry; x: number } | null>(null)
 
   return (
-    <svg
-      className="chart chart--timeline"
-      viewBox={`0 0 ${W} ${TL.h}`}
-      role="img"
-      aria-label="今日时间线"
-    >
-      {/* 泳道底：一条浅槽，块画在它上面 */}
-      <rect x={0} y={TL.laneY} width={W} height={TL.laneH} className="timeline__lane" />
+    <div className="timeline">
+      <svg
+        className="chart chart--timeline"
+        viewBox={`0 0 ${W} ${TL.h}`}
+        role="img"
+        aria-label="今日时间线"
+      >
+        {/* 泳道底：一条浅槽，块画在它上面 */}
+        <rect x={0} y={TL.laneY} width={W} height={TL.laneH} className="timeline__lane" />
 
-      {data.map((e, i) => {
-        const start = new Date(e.startedAt)
-        const startMin = start.getHours() * 60 + start.getMinutes() + start.getSeconds() / 60
-        const durMin = e.actualSec / 60
-        // 跨零点的段：按开始时间归当天，但不许越过 24 点（裁到当天末尾）
-        const endMin = Math.min(24 * 60, startMin + durMin)
-        const x = timeToX(startMin, slot)
-        const w = Math.max(TL.minW, timeToX(endMin - startMin, slot))
-        const isBreak = e.kind !== 'focus'
-        const cls = [
-          'timeline__seg',
-          !e.color && !isBreak ? 'timeline__seg--none' : '',
-          isBreak ? 'timeline__seg--break' : '',
-          !e.completed ? 'timeline__seg--open' : ''
-        ]
-          .filter(Boolean)
-          .join(' ')
-        const label = `${fmtTime(e.startedAt)} – ${fmtTime(e.endedAt)}　${
-          e.topicName || '未挂主题'
-        }${e.task ? `　${e.task}` : ''}`
-        return (
-          <g key={`${e.startedAt}-${i}`}>
-            <title>{label}</title>
-            <rect
-              x={x}
-              y={TL.laneY}
-              width={w}
-              height={TL.laneH}
-              rx={2}
-              className={cls}
-              style={{ '--topic-color': e.color || 'var(--ink-3)' } as React.CSSProperties}
-            />
-            {/* 宽度够才写字：不够就省略，宁可少写也别糊成一团 */}
-            {w >= TL.textW ? (
-              <text
-                x={x + 3}
-                y={TL.laneY + TL.laneH / 2 + 3}
-                className="timeline__seg-text"
-              >
-                {w >= TL.textWFull ? `${minutes(e.actualSec)} 分` : minutes(e.actualSec)}
-              </text>
-            ) : null}
-          </g>
-        )
-      })}
+        {data.map((e, i) => {
+          const start = new Date(e.startedAt)
+          const startMin = start.getHours() * 60 + start.getMinutes() + start.getSeconds() / 60
+          const durMin = e.actualSec / 60
+          // 跨零点的段：按开始时间归当天，但不许越过 24 点（裁到当天末尾）
+          const endMin = Math.min(24 * 60, startMin + durMin)
+          const x = timeToX(startMin, slot)
+          const w = Math.max(TL.minW, timeToX(endMin - startMin, slot))
+          const isBreak = e.kind !== 'focus'
+          const cls = [
+            'timeline__seg',
+            !e.color && !isBreak ? 'timeline__seg--none' : '',
+            isBreak ? 'timeline__seg--break' : '',
+            !e.completed ? 'timeline__seg--open' : ''
+          ]
+            .filter(Boolean)
+            .join(' ')
+          // 块内写字的门槛是 **45 分钟**（肥鱼定的）：
+          // 24 小时的轴上 45 分钟也只有 12.5px，再小就是噪声。
+          // 其余信息全走 hover 浮层，不硬塞。
+          const durMinR = Math.round(durMin)
+          const showText = durMinR >= TL.textMinMinutes
+          return (
+            <g key={`${e.startedAt}-${i}`}>
+              {/*
+                原生 <title>（浏览器 tooltip）只作兜底。
+                信息不全 —— 完整信息在下面那个 React 浮层里，
+                它才有主题、任务名、"没跑完"这些。
+              */}
+              <title>{`${fmtTime(e.startedAt)} – ${fmtTime(e.endedAt)}　${durMinR} 分钟`}</title>
+              <rect
+                x={x}
+                y={TL.laneY}
+                width={w}
+                height={TL.laneH}
+                rx={2}
+                className={cls}
+                onMouseEnter={() => setHover({ e, x })}
+                onMouseLeave={() => setHover(null)}
+                style={{ '--topic-color': e.color || 'var(--ink-3)' } as React.CSSProperties}
+              />
+              {showText ? (
+                <text
+                  x={x + 3}
+                  y={TL.laneY + TL.laneH / 2 + 3}
+                  className="timeline__seg-text"
+                >
+                  {durMinR >= TL.textMinMinutesFull ? `${durMinR} 分` : durMinR}
+                </text>
+              ) : null}
+            </g>
+          )
+        })}
 
       {/* 「现在」：只有今天才有这条线 */}
       {nowX >= 0 && nowX <= W ? (
@@ -158,7 +180,51 @@ function TimelineChart({ data }: { data: TimelineEntry[] }): React.JSX.Element {
       <text x={W} y={TL.labelY} className="chart__label" textAnchor="end">
         24
       </text>
-    </svg>
+      </svg>
+
+      {/*
+        详情浮层：起止时间 + 时长 + 主题 + 任务名。
+        块里塞不下这些（24 小时的轴上一格才十几像素），
+        所以全部信息走这里。位置跟着悬停的那一段走。
+
+        用 HTML 而不是 SVG 里的 <foreignObject>：
+        文字不用跟着 viewBox 缩放，字号始终是设计好的那个大小。
+
+        靠边时改锚点，不然浮层会跑出卡片被裁掉
+        （第一版就这问题：00:34 的段在最左边，浮层左边被切掉一半）。
+      */}
+      {hover ? (
+        <div
+          className="timeline__tip"
+          data-anchor={hover.x < 60 ? 'left' : hover.x > W - 60 ? 'right' : 'center'}
+          style={{
+            // 百分比定位：跟 svg 的缩放无关，块在哪就跟在哪
+            left: `${(hover.x / W) * 100}%`
+          }}
+          role="tooltip"
+        >
+          <div className="timeline__tip-time">
+            {fmtTime(hover.e.startedAt)} – {fmtTime(hover.e.endedAt)}
+            <span className="timeline__tip-dur">{minutes(hover.e.actualSec)} 分钟</span>
+          </div>
+          <div className="timeline__tip-topic">
+            <i
+              className="timeline__tip-dot"
+              style={{ background: hover.e.color || 'var(--ink-3)' }}
+            />
+            {hover.e.kind === 'focus'
+              ? hover.e.topicName || '未挂主题'
+              : hover.e.kind === 'long'
+                ? '长休息'
+                : '短休息'}
+            {hover.e.task ? <span className="timeline__tip-task">{hover.e.task}</span> : null}
+          </div>
+          {hover.e.kind === 'focus' && !hover.e.completed ? (
+            <div className="timeline__tip-flag">没跑完</div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
   )
 }
 

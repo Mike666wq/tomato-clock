@@ -135,7 +135,8 @@ const SESSIONS = [
   // 没跑完的段
   at(16, 0, 300, { completed: false, actualSec: 300, plannedSec: 1500 }),
   // 第二个主题（验纸感下两个主题的色块能互相区分）
-  at(10, 0, 2700, { topicId: 'topic-deep', topicNameSnapshot: '深度工作' })
+  at(10, 0, 2700, { topicId: 'topic-deep', topicNameSnapshot: '深度工作' }),
+  at(12, 0, 2700, { topicId: 'topic-deep', topicNameSnapshot: '深度工作', task: '改那个 bug' })
 ]
 
 async function applySettings(over) {
@@ -345,13 +346,28 @@ const paperColors = await evaluate(
   main,
   `(() => {
     const out = {}
-    for (const r of document.querySelectorAll('.timeline__seg')) {
-      const title = r.parentElement.querySelector('title')?.textContent ?? ''
-      out[title] = getComputedStyle(r).fill
-    }
-    return out
+    // 主题名在 React 浮层里（原生 title 只有时间和时长），
+    // 所以这里按**位置**配对：第 i 个块 ↔ 第 i 段数据。
+    const segs = [...document.querySelectorAll('.timeline__seg')]
+    return segs.map((r, i) => ({
+      fill: getComputedStyle(r).fill,
+      x: Number(r.getAttribute('x'))
+    }))
   })()`
 )
+// 主题色是注入的 CSS 变量，直接读它更准
+const topicColors = await evaluate(
+  main,
+  `(() => {
+    const segs = [...document.querySelectorAll('.timeline__seg')]
+    return segs.map(r => ({
+      raw: r.style.getPropertyValue('--topic-color').trim(),
+      fill: getComputedStyle(r).fill,
+      cls: r.getAttribute('class') ?? ''
+    }))
+  })()`
+)
+const segClasses = topicColors.map((t) => t.cls)
 function parseFill(s) {
   const m = String(s).match(/color\(srgb ([\d.]+) ([\d.]+) ([\d.]+)(?:\s*\/\s*([\d.]+))?\)/)
   if (m) {
@@ -380,52 +396,57 @@ function saturation(c) {
   const l = (mx + mn) / 2
   return (l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn)) * 100
 }
-const topicFills = Object.entries(paperColors)
-  .filter(([k]) => k.includes('操作系统复习') || k.includes('深度工作'))
-  .map(([k, v]) => ({
-    key: k,
-    topic: k.includes('操作系统复习') ? '操作系统复习' : '深度工作',
-    color: parseFill(v)
-  }))
-  .filter((x) => x.color)
-const topicNames = [...new Set(topicFills.map((t) => t.topic))]
-if (topicNames.length < 2) {
+function hue(c) {
+  const r = c.r / 255
+  const g = c.g / 255
+  const bl = c.b / 255
+  const mx = Math.max(r, g, bl)
+  const mn = Math.min(r, g, bl)
+  if (mx === mn) return 0
+  const d = mx - mn
+  let h
+  if (mx === r) h = ((g - bl) / d + (g < bl ? 6 : 0))
+  else if (mx === g) h = (bl - r) / d + 2
+  else h = (r - g) / d + 4
+  return (h * 60) % 360
+}
+// 两个主题：'操作系统复习'(蓝 #7aa2f7) 和 '深度工作'(绿 #5ac49b)
+// **不能按固定下标取** —— 休息段也占下标，取错了会量到休息段的颜色
+// （第一版就取到了休息段：饱和 9%、色相 48°，那不是主题绿）。
+// 也**不能取"第一个和最后一个"** —— 过滤后顺序里首尾可能同色。
+// 正确做法：按注入的主题色**去重**，每种颜色取一个代表。
+const themeSegs = topicColors
+  .map((t, i) => ({ ...t, i }))
+  .filter((t) => {
+    const cls = segClasses[t.i] ?? ''
+    return !cls.includes('--none') && !cls.includes('--break')
+  })
+  .map((t) => ({ ...t, color: parseFill(t.fill) }))
+  .filter((t) => t.color)
+// 按注入的原始色值去重（--topic-color 才是"这是哪个主题"的真相，
+// computed fill 是混过墨色的结果，同一主题的多个块值一样）
+const byRaw = new Map()
+for (const t of themeSegs) {
+  if (!byRaw.has(t.raw)) byRaw.set(t.raw, t)
+}
+const distinct = [...byRaw.values()]
+if (distinct.length < 2) {
   check(
-    'E2 纸感下能取到两个不同主题的色块',
+    'E2 纸感下能取到两个主题的色块',
     false,
-    `只取到 ${topicNames.length} 个主题（${topicNames.join('/')}）—— 数据里只有一个主题，验不了区分度`
+    `只取到 ${distinct.length} 种主题色（${[...byRaw.keys()].join('/')}）`
   )
 } else {
-  // 每个主题取一个色块，算它跟"另一个主题的色块"的距离
-  const perTopic = topicNames.map((n) => {
-    const t = topicFills.find((x) => x.topic === n)
-    return { name: n, color: t.color, sat: saturation(t.color) }
-  })
-  const a = perTopic[0]
-  const b = perTopic[1]
-  // 色相距离：两个色块能不能被区分，看的是色相不是亮度
-  function hue(c) {
-    const r = c.r / 255
-    const g = c.g / 255
-    const bl = c.b / 255
-    const mx = Math.max(r, g, bl)
-    const mn = Math.min(r, g, bl)
-    if (mx === mn) return 0
-    const d = mx - mn
-    let h
-    if (mx === r) h = ((g - bl) / d + (g < bl ? 6 : 0))
-    else if (mx === g) h = (bl - r) / d + 2
-    else h = (r - g) / d + 4
-    return (h * 60) % 360
-  }
-  const dh = Math.abs(hue(a.color) - hue(b.color))
+  const cA = distinct[0].color
+  const cB = distinct[distinct.length - 1].color
+  const dh = Math.abs(hue(cA) - hue(cB))
   const dhMin = Math.min(dh, 360 - dh)
-  const minSat = Math.min(a.sat, b.sat)
+  const minSat = Math.min(saturation(cA), saturation(cB))
   check(
     'E2 纸感下两个主题的色块能互相区分（色相 ≥ 40° 且饱和度 ≥ 25%）',
     dhMin >= 40 && minSat >= 25,
-    `${a.name} 饱和 ${a.sat.toFixed(0)}% 色相 ${hue(a.color).toFixed(0)}°；` +
-      `${b.name} 饱和 ${b.sat.toFixed(0)}% 色相 ${hue(b.color).toFixed(0)}°；` +
+    `${distinct[0].raw} 饱和 ${saturation(cA).toFixed(0)}% 色相 ${hue(cA).toFixed(0)}°；` +
+      `${distinct[distinct.length - 1].raw} 饱和 ${saturation(cB).toFixed(0)}% 色相 ${hue(cB).toFixed(0)}°；` +
       `色相差 ${dhMin.toFixed(0)}°（要求 ≥40°，饱和度 ≥25%）`
   )
 }
@@ -443,6 +464,101 @@ check(
   `nowX=${timeline.nowX?.toFixed(2)} 期望 ${expectNowX.toFixed(2)}（${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}）`
 )
 check('F2 「现在」有标签', timeline.nowLabel === '现在', `标签="${timeline.nowLabel}"`)
+
+// ---------- G. 块内文字门槛 45 分钟 + hover 浮层 ----------
+// 肥鱼定的：块内只在 ≥45 分钟时写时长；其余信息全走 hover 浮层。
+// 判据是**分钟数**不是像素 —— 像素宽度会随画布缩放漂移。
+const textInfo = await evaluate(
+  main,
+  `(() => {
+    const segs = [...document.querySelectorAll('.timeline__seg')].map(r => {
+      const g = r.parentElement
+      const title = g.querySelector('title')?.textContent ?? ''
+      const m = title.match(/– ([^　]+)　(\\d+) 分钟/)
+      const durMin = m ? parseInt(m[2]) : -1
+      const t = g.querySelector('.timeline__seg-text')
+      return { durMin, text: t ? t.textContent : null }
+    })
+    return segs
+  })()`
+)
+if (!textInfo || textInfo.length === 0) {
+  check('G1 取得到块的信息', false, '没取到段')
+} else {
+  const below = textInfo.filter((s) => s.durMin >= 0 && s.durMin < 45)
+  const atOrAbove = textInfo.filter((s) => s.durMin >= 45)
+  const belowWrong = below.filter((s) => s.text !== null)
+  const aboveWrong = atOrAbove.filter((s) => s.text === null)
+  check(
+    'G1 不到 45 分钟的块不写时长（宁可不写，别塞成噪声）',
+    belowWrong.length === 0,
+    `有 ${below.length} 段不到 45 分钟，其中 ${belowWrong.length} 段却写了字` +
+      (below.length ? `（${below.map((s) => s.durMin + '分').join('/')}）` : '')
+  )
+  check(
+    'G2 到 45 分钟的块写时长',
+    aboveWrong.length === 0,
+    `有 ${atOrAbove.length} 段 ≥45 分钟，其中 ${aboveWrong.length} 段没写字`
+  )
+}
+
+// hover 浮层
+// 注意：**不能用 dispatchEvent 合成事件** —— React 的 onMouseEnter
+// 挂在 mouseover 上，合成事件不走 React 的事件委托，测了等于没测。
+// 用 CDP 的 Input.dispatchMouseEvent 发真实鼠标事件。
+// 坐标要在**移动鼠标之前**取 —— 前面 E2 切过主题，块的位置已经变了。
+const segBox = await evaluate(
+  main,
+  `(() => {
+    const seg = [...document.querySelectorAll('.timeline__seg')].find(r => {
+      const t = r.parentElement.querySelector('title')?.textContent ?? ''
+      return t.includes('00:34')
+    })
+    if (!seg) return null
+    const r = seg.getBoundingClientRect()
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
+  })()`
+)
+if (!segBox) {
+  check('G3 悬停有详情浮层', false, '没找到 00:34 的段')
+} else {
+  // 先把鼠标挪到别处，确保是"移上去"触发的，不是上一轮残留
+  await send(main, 'Input.dispatchMouseEvent', { type: 'mouseMoved', x: 5, y: 5 })
+  await sleep(200)
+  await send(main, 'Input.dispatchMouseEvent', {
+    type: 'mouseMoved',
+    x: Math.round(segBox.x),
+    y: Math.round(segBox.y)
+  })
+  await sleep(400)
+  const tip = await evaluate(
+    main,
+    `(() => {
+      const tip = document.querySelector('.timeline__tip')
+      if (!tip) return { exists: false }
+      return {
+        exists: true,
+        time: tip.querySelector('.timeline__tip-time')?.textContent ?? '',
+        dur: tip.querySelector('.timeline__tip-dur')?.textContent ?? '',
+        topic: tip.querySelector('.timeline__tip-topic')?.textContent ?? '',
+        hasTask: !!tip.querySelector('.timeline__tip-task'),
+        left: tip.style.left
+      }
+    })()`
+  )
+  check(
+    'G3 悬停有详情浮层（起止 + 时长 + 主题 + 任务名）',
+    tip.exists && tip.time.includes('00:34') && tip.dur.includes('25') && tip.topic.length > 0 && tip.hasTask,
+    tip.exists
+      ? `时间="${tip.time}" 时长="${tip.dur}" 主题="${tip.topic}" 有任务名=${tip.hasTask} 定位=${tip.left}`
+      : '没出现浮层'
+  )
+  // 移开就该消失 —— 浮层不能赖着不走
+  await send(main, 'Input.dispatchMouseEvent', { type: 'mouseMoved', x: 5, y: 5 })
+  await sleep(300)
+  const gone = await evaluate(main, `!document.querySelector('.timeline__tip')`)
+  check('G4 鼠标移开浮层消失', gone === true, `移开后浮层还在 = ${gone === true ? '否' : '是'}`)
+}
 
 // ---------- 汇总 ----------
 const failed = results.filter((r) => !r.pass)
