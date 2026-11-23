@@ -16,7 +16,8 @@
 //
 // 数据文件是唯一真相源：界面说的必须和它一致，对不上就是 bug。
 
-import { readFileSync, writeFileSync, renameSync, existsSync } from 'node:fs'
+import { readFileSync, writeFileSync, renameSync, existsSync, readdirSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 
 const port = process.env.CDP_PORT ?? '9222'
@@ -103,7 +104,7 @@ async function pickTarget(which) {
   const pages = (await targets()).filter((t) => t.type === 'page')
   const hit = which === 'island'
     ? pages.filter((p) => pathOf(p).includes('island'))
-    : pages.filter((p) => pathOf(p).endsWith('index.html') && !pathOf(p).includes('island'))
+    : pages.filter((p) => pathOf(p) === '/' || (pathOf(p).endsWith('index.html') && !pathOf(p).includes('island')))
   return hit[0] ?? null
 }
 
@@ -179,6 +180,75 @@ const island = islandTarget ? await connect(islandTarget.webSocketDebuggerUrl) :
 console.log(`# main  = ${mainTarget.url}`)
 console.log(`# island= ${islandTarget ? islandTarget.url : '(没有灵动岛窗口)'}`)
 
+/**
+ * 收尾。
+ *
+ * 必须先把 WebSocket 关掉再退出：Node 的 undici WebSocket 在 Windows 上
+ * 直接 process.exit 会崩（退出码 0xC0000409），那次崩会把"断言全过"的
+ * 结果变成"进程异常结束"。
+ */
+function finish(code) {
+  try {
+    main.close()
+  } catch {
+    /* 忽略 */
+  }
+  try {
+    island?.close()
+  } catch {
+    /* 忽略 */
+  }
+  setTimeout(() => process.exit(code), 300)
+}
+
+if (stage === 'corrupt') {
+  // ---- D6：数据文件写坏了会怎样 ----
+  // 前提：外面已经把 data.json 写坏、杀掉了程序、又重新起来了。
+  // 验收：不崩、原件被备份、用户看得见提示。
+  const st = await evaluate(main, 'window.pomodoro.timer.getState()')
+  check('D6 数据文件坏了：程序没崩，照样能取到状态', st !== null && typeof st.phase === 'string',
+    `phase=${st?.phase}`)
+
+  const dir = path.dirname(dataFile)
+  const backups = readdirSync(dir).filter((f) => f.startsWith('data.json.corrupt-'))
+  check('D6 数据文件坏了：原件被改名备份了', backups.length > 0,
+    `备份文件：${backups.join(', ') || '没有'}`)
+
+  if (backups.length > 0) {
+    const backupText = readFileSync(path.join(dir, backups[0]), 'utf-8')
+    check('D6 备份里就是那份坏文件（没被覆盖）',
+      backupText.includes('E2E-CORRUPT-MARKER'),
+      `备份内容前 60 字：${JSON.stringify(backupText.slice(0, 60))}`)
+  }
+
+  const logText = existsSync(path.join(dir, 'app.log'))
+    ? readFileSync(path.join(dir, 'app.log'), 'utf-8')
+    : ''
+  check('D6 数据文件坏了：日志里记了 ERROR',
+    logText.includes('数据文件损坏'),
+    logText.split('\n').filter((l) => l.includes('损坏')).slice(-1)[0] ?? '日志里没有')
+
+  // 启动时那条提示可能被后来的提示顶掉（快捷键注册失败也会弹提示），
+  // 所以这里再验一次**运行中**遇到坏文件时的路径：这一次提示是实时推给界面的。
+  await evaluate(
+    main,
+    'window.__e2eNotices = []; window.pomodoro.notice.onShow((n) => window.__e2eNotices.push(n.text))'
+  )
+  await writeFileSync(dataFile, '{"sessions": [ {"broken": true, "note": "E2E-CORRUPT-MARKER"', 'utf-8')
+  await evaluate(main, 'window.pomodoro.records.summary()').catch(() => {})
+  await sleep(1500)
+  const notices6 = await evaluate(main, 'window.__e2eNotices ?? []')
+  check('D6 运行中读到坏文件：界面上立刻有提示',
+    Array.isArray(notices6) && notices6.some((t) => String(t).includes('损坏')),
+    `收到的提示：${JSON.stringify(notices6)}`)
+  const backups2 = readdirSync(dir).filter((f) => f.startsWith('data.json.corrupt-'))
+  check('D6 运行中读到坏文件：也留了备份', backups2.length >= 2,
+    `备份文件：${backups2.join(', ') || '没有'}`)
+
+  console.log(JSON.stringify({ results }, null, 2))
+  finish(results.some((r) => !r.ok) ? 1 : 0)
+}
+
 if (stage === 'restore') {
   // ---- 重启恢复：快照 vs 界面 ----
   const snap = JSON.parse(readFileSync(snapshotFile, 'utf-8'))
@@ -193,11 +263,11 @@ if (stage === 'restore') {
   const status = parseStatus(await statusText(main))
   const data = readData()
   check('R5 界面"今天 N 个"与 data.json 一致',
-    status !== null && status.count === countByEndedAt(data.sessions),
-    `界面=${status?.count} 磁盘(按结束时间)=${countByEndedAt(data.sessions)} ` +
+    status !== null && status.count === countByStartedAt(data.sessions),
+    `界面=${status?.count} 磁盘(按开始时间)=${countByStartedAt(data.sessions)} ` +
     `磁盘(按开始时间)=${countByStartedAt(data.sessions)}`)
   console.log(JSON.stringify({ results }, null, 2))
-  process.exit(results.some((r) => !r.ok) ? 1 : 0)
+  finish(results.some((r) => !r.ok) ? 1 : 0)
 }
 
 // ================= journey =================
@@ -281,8 +351,8 @@ check('S4 跳过写了一条 completed=false 的专注记录',
   `新增=${d4.sessions.length - n0} 最后一条 completed=${skipped?.completed}`)
 const st4 = parseStatus(await statusText(main))
 check('S4 跳过不计入"今天 N 个"',
-  st4 !== null && st4.count === countByEndedAt(d4.sessions),
-  `界面=${st4?.count} 磁盘=${countByEndedAt(d4.sessions)}`)
+  st4 !== null && st4.count === countByStartedAt(d4.sessions),
+  `界面=${st4?.count} 磁盘=${countByStartedAt(d4.sessions)}`)
 
 // ---- S4b 跳过休息段：不写记录，回到专注段 ----
 await evaluate(main, "window.pomodoro.timer.action('skip')")
@@ -338,114 +408,129 @@ check('S6 提交后任务名与打断原因写回磁盘',
 const st5 = parseStatus(await statusText(main))
 const sum5 = await evaluate(main, 'window.pomodoro.records.summary()')
 const stat5 = await evaluate(main, 'window.pomodoro.stats.get()')
-check('S7 主界面状态行与 data.json 一致（按结束时间）',
-  st5 !== null && st5.count === countByEndedAt(d6.sessions),
-  `状态行=${st5?.count} 磁盘=${countByEndedAt(d6.sessions)}`)
-check('S7 主进程汇总与 data.json 一致（按结束时间）',
-  sum5?.todayCount === countByEndedAt(d6.sessions),
-  `汇总=${sum5?.todayCount} 磁盘=${countByEndedAt(d6.sessions)}`)
+check('S7 主界面状态行与 data.json 一致（按开始时间）',
+  st5 !== null && st5.count === countByStartedAt(d6.sessions),
+  `状态行=${st5?.count} 磁盘=${countByStartedAt(d6.sessions)}`)
+check('S7 主进程汇总与 data.json 一致（按开始时间）',
+  sum5?.todayCount === countByStartedAt(d6.sessions),
+  `汇总=${sum5?.todayCount} 磁盘=${countByStartedAt(d6.sessions)}`)
 check('S7 统计页与主界面今日数一致（按开始时间）',
   stat5?.todayCount === countByStartedAt(d6.sessions),
   `统计页=${stat5?.todayCount} 磁盘(按开始时间)=${countByStartedAt(d6.sessions)}`)
 
-// ---- S8 并发写设置（H1 复现）----
-// 两个**不相干**的字段同时保存：主题 和 深浅。
-// 主进程的写法是"读整个 settings → 合并一个字段 → 写回整个 settings"，
-// 两个请求都读到同一份旧快照，谁后写谁就把对方的改动覆盖掉。
+// ================= D1：并发保存两个不相干的设置 =================
+//
+// 修之前的写法是"读整份 → 并一个字段 → 写回整份"，
+// 两个请求读到同一份旧快照，谁后写谁就把对方的改动覆盖掉。
+// 修法：设置单例 + 串行队列 + 合并内存里的当前值。
+//
+// 验收（肥鱼定的）：**连续 20 轮零丢失**。
 const themes = ['neon', 'paper', 'neon', 'ios']
-const modes = ['light', 'dark', 'light', 'dark']
 let lostRounds = 0
 let lastDetail = ''
-for (let r = 0; r < 4; r++) {
-  const th = themes[r]
-  const md = modes[r]
-  // 同一个 tick 里发出两个请求：它们会读到同一份旧快照
+for (let r = 0; r < 20; r++) {
+  const th = themes[r % themes.length]
+  const vol = Math.round((0.1 + (r % 5) * 0.1) * 100) / 100
+  // 同一个 tick 里发出两个请求
   evaluate(main, `window.pomodoro.settings.save({uiTheme:${JSON.stringify(th)}})`).catch(() => {})
-  evaluate(main, `window.pomodoro.settings.save({uiMode:${JSON.stringify(md)}})`).catch(() => {})
-  await sleep(900)
+  evaluate(main, `window.pomodoro.settings.save({volume:${vol}})`).catch(() => {})
+  await sleep(450)
   const d = readData()
   const gotTheme = d.settings?.uiTheme
-  const gotMode = d.settings?.uiMode
-  if (gotTheme !== th || gotMode !== md) {
+  const gotVol = d.settings?.volume
+  if (gotTheme !== th || Math.abs((gotVol ?? -1) - vol) > 1e-9) {
     lostRounds++
-    lastDetail = `第${r + 1}轮：要 theme=${th} mode=${md}，磁盘上 theme=${gotTheme} mode=${gotMode}`
+    lastDetail = `第${r + 1}轮：要 theme=${th} volume=${vol}，磁盘上 theme=${gotTheme} volume=${gotVol}`
   }
 }
-check('S8 并发保存两个不相干的设置：两次改动都在',
+check('D1 并发保存两个不相干的设置：20 轮零丢失',
   lostRounds === 0,
-  lostRounds ? `${lostRounds}/4 轮丢改动 —— ${lastDetail}` : '4 轮都没丢')
+  lostRounds ? `${lostRounds}/20 轮丢改动 —— ${lastDetail}` : '20 轮都没丢')
 
-// ---- S8b 高并发写之后，data.json 还是不是合法 JSON ----
-// 程序的写盘是"写 .tmp 再 rename"，所有并发写共用同一个 .tmp 文件名。
-// 两个写同时进行时，内容会搅在一起 → 文件变成非法 JSON。
-const hammerCount = 40
-const recId0 = readData().sessions[0]?.id
-for (let i = 0; i < hammerCount; i++) {
-  evaluate(main, `window.pomodoro.settings.save({activeTopicId:${JSON.stringify(i % 2 ? null : 'x')}})`)
+// ================= D5：坏值不许落盘 =================
+//
+// 传一个 uiTheme: 123 —— 磁盘文件必须**一个字节都不变**，界面上要有提示。
+const bytesBefore = readFileSync(dataFile)
+// 先挂一个通知监听，把主进程推来的提示收下来
+await evaluate(
+  main,
+  'window.__e2eNotices = []; window.pomodoro.notice.onShow((n) => window.__e2eNotices.push(n.text))'
+)
+await evaluate(main, 'window.pomodoro.settings.save({uiTheme: 123})').catch(() => {})
+await sleep(1200)
+const bytesAfter = readFileSync(dataFile)
+check('D5 传一个坏值：磁盘文件一个字节都没变',
+  Buffer.compare(bytesBefore, bytesAfter) === 0,
+  `前 ${bytesBefore.length} 字节 / 后 ${bytesAfter.length} 字节`)
+const notices5 = await evaluate(main, 'window.__e2eNotices ?? []')
+check('D5 传一个坏值：界面上有提示',
+  Array.isArray(notices5) && notices5.length > 0 && String(notices5[0]).includes('设置'),
+  `收到的提示：${JSON.stringify(notices5)}`)
+const toast5 = await evaluate(main, "document.querySelector('.toast')?.textContent ?? ''")
+check('D5 传一个坏值：提示条真的显示出来了', String(toast5).includes('设置'),
+  `提示条内容="${toast5}"`)
+
+// ---- D5b：删掉"正在用的那个模板"，删除不能被校验挡下来 ----
+// 界面删除模板时会连发两个保存：先"模板列表变了"，再"换个模板"。
+// 中间那一刻 activePresetId 指向已经不存在的模板 —— 那是正常状态，
+// 存储层要把它修正掉，而不是把整次保存拒了。
+const d5b = readData()
+const presetList = Array.isArray(d5b.settings?.presets) ? d5b.settings.presets : []
+const activeOne = presetList.find((p) => p.id === d5b.settings?.activePresetId)
+if (activeOne) {
+  const rest = presetList.filter((p) => p.id !== activeOne.id)
+  await evaluate(main, `window.pomodoro.settings.save({presets: ${JSON.stringify(rest)}})`)
     .catch(() => {})
-  if (recId0) {
-    evaluate(main, `window.pomodoro.records.submit(${JSON.stringify(recId0)}, '压测${i}', 'none')`)
-      .catch(() => {})
-  }
-}
-await sleep(3000)
-let jsonOk = true
-let jsonErr = ''
-try {
-  JSON.parse(readFileSync(dataFile, 'utf-8'))
-} catch (err) {
-  jsonOk = false
-  jsonErr = err.message
-}
-check('S8b 高并发写之后 data.json 仍是合法 JSON', jsonOk,
-  jsonOk ? `${hammerCount * 2} 次并发写，文件正常` : jsonErr)
-
-// ---- S8c 写坏之后程序会怎样（读不出来就当默认数据，下次写就把历史抹掉）----
-if (!jsonOk) {
-  const sum = await evaluate(main, 'window.pomodoro.records.summary()').catch(() => null)
-  let onDisk = '读不出来'
-  try {
-    onDisk = `${JSON.parse(readFileSync(dataFile, 'utf-8')).sessions.length} 条`
-  } catch {
-    /* 文件已经坏了 */
-  }
-  check('S8c 写坏后程序没崩，但会把坏文件当默认数据（历史被无视）',
-    sum !== null && sum?.totalFocusSec === 0,
-    `汇总 totalFocusSec=${sum?.totalFocusSec}（磁盘里明明有 ${onDisk}）`)
+  await sleep(800)
+  await evaluate(main, "window.pomodoro.settings.save({activePresetId:'builtin-classic'})")
+    .catch(() => {})
+  await sleep(1000)
+  const d5b2 = readData()
+  const names5b = (d5b2.settings?.presets ?? []).map((p) => p.id)
+  check('D5b 删掉正在用的模板：删除生效了，且没有报错',
+    !names5b.includes(activeOne.id) &&
+      d5b2.settings?.activePresetId === 'builtin-classic' &&
+      names5b.length === presetList.length - 1,
+    `模板数=${names5b.length}(期望 ${presetList.length - 1}) 当前模板=${d5b2.settings?.activePresetId}`)
+} else {
+  check('D5b 删掉正在用的模板', false, '找不到当前模板')
 }
 
-// ---- S8d 缩放窗口会不会把刚改的设置冲掉 ----
+// ================= D2：拖窗口不能把设置顶回去 =================
+//
+// 窗口每次 resize / move 都会 saveBounds。以前它"读整份设置 → 写回整份"，
+// 用的那份快照可能比主题改动更旧，于是拖一下窗口主题就变回去了。
+//
+// 这里用真的 Win32 调用拖 20 次（scripts/resize-window.ps1），
+// 不是 CDP 改尺寸 —— 走的是用户真的拖窗口那条路径。
 const pList = Array.isArray(d6.settings?.presets) ? d6.settings.presets : []
 const presetB = pList[1]?.id ?? pList[0]?.id
-// 窗口每次 resize / move 都会 saveBounds：读整个 settings → 写回整个 settings。
-// 和设置保存是同一条路，所以拖一下窗口就可能把刚改的主题顶回去。
+// 基准值现取：前面的用例（比如删模板）可能已经换过当前模板了，
+// 这里要验的是"拖窗口不会把它顶回去"，不是"它等于某个写死的值"
+const presetBefore = readData().settings?.activePresetId
+await evaluate(main, `window.pomodoro.settings.save({uiTheme:'ios'})`).catch(() => {})
+await evaluate(main, 'window.pomodoro.settings.save({volume:0.77})').catch(() => {})
+await sleep(800)
+let resizeOut = ''
 try {
-  const pages = await targets()
-  const mainT = pages.find((p) => p.type === 'page' && !p.url.includes('island'))
-  const winId = await send(main, 'Browser.getWindowForTarget', { targetId: mainT.id })
-  const b0 = await send(main, 'Browser.getWindowBounds', { windowId: winId.windowId })
-  const w0 = b0.bounds.width
-  const h0 = b0.bounds.height
-  const th = 'neon'
-  evaluate(main, `window.pomodoro.settings.save({uiTheme:${JSON.stringify(th)}})`).catch(() => {})
-  for (let i = 0; i < 20; i++) {
-    send(main, 'Browser.setWindowBounds', {
-      windowId: winId.windowId,
-      bounds: { width: w0 + (i % 2 ? 9 : -9), height: h0 }
-    }).catch(() => {})
-  }
-  await sleep(2500)
-  const d = readData()
-  check('S8d 缩放窗口没有把刚改的主题冲掉',
-    d.settings?.uiTheme === th,
-    `期望=${th} 磁盘=${d.settings?.uiTheme}`)
-  await send(main, 'Browser.setWindowBounds', {
-    windowId: winId.windowId,
-    bounds: { width: w0, height: h0 }
-  }).catch(() => {})
+  resizeOut = execFileSync(
+    'powershell',
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+      path.join(projectRoot, 'scripts', 'resize-window.ps1'), '-Times', '20'],
+    { encoding: 'utf-8' }
+  )
 } catch (err) {
-  check('S8d 缩放窗口没有把刚改的主题冲掉', false, `测不了：${err.message}`)
+  resizeOut = `拖窗口失败：${err.message}`
 }
+await sleep(2000)
+const d2 = readData()
+check('D2 拖窗口 20 次后，主题/音量/模板都还在',
+  String(resizeOut).includes('RESIZED') &&
+    d2.settings?.uiTheme === 'ios' &&
+    Math.abs((d2.settings?.volume ?? -1) - 0.77) < 1e-9 &&
+    d2.settings?.activePresetId === presetBefore,
+  `主题=${d2.settings?.uiTheme}(期望 ios) 音量=${d2.settings?.volume}(期望 0.77) ` +
+  `模板=${d2.settings?.activePresetId}(期望 ${presetBefore})；${String(resizeOut).trim()}`)
 
 // ---- S9 两窗口读数是否打架（H4）----
 if (island) {
@@ -467,18 +552,21 @@ if (island) {
   check('S9 灵动岛', false, '没有灵动岛窗口，跳过')
 }
 
-// ---- S10 跨零点口径 ----
-// 造一条"今天 23:50 开始、明天 00:10 结束"的番茄：
-// 主界面的汇总按结束时间算今天，统计页按开始时间算今天 —— 两边必须一致。
+// ================= D3：跨零点只有一个口径 =================
+//
+// 造一条"昨天 23:50 开始、今天 00:10 结束"的番茄：
+// 按开始时间归属，它算**昨天**的 —— 主界面和统计页都必须不把它算进今天，
+// 而且两边的"今天"必须是同一个数。
 const now = new Date()
-const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 50, 0)
-const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 10, 0)
+const yStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 50, 0)
+const yEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 10, 0)
 const d10 = readData()
+const before10 = countByStartedAt(d10.sessions)
 d10.sessions.push({
   id: 'e2e-cross-midnight',
   kind: 'focus',
-  startedAt: start.toISOString(),
-  endedAt: end.toISOString(),
+  startedAt: yStart.toISOString(),
+  endedAt: yEnd.toISOString(),
   plannedSec: 1200,
   actualSec: 1200,
   completed: true,
@@ -486,19 +574,47 @@ d10.sessions.push({
   interrupt: 'none'
 })
 writeData(d10)
-await sleep(400)
+await sleep(500)
 const sum10 = await evaluate(main, 'window.pomodoro.records.summary()')
 const stat10 = await evaluate(main, 'window.pomodoro.stats.get()')
-check('S10 跨零点的番茄：主界面与统计页口径一致',
+check('D3 跨零点的番茄：主界面与统计页给出同一个数',
   sum10?.todayCount === stat10?.todayCount,
-  `主界面(按结束时间)=${sum10?.todayCount} 统计页(按开始时间)=${stat10?.todayCount}`)
-const st10 = parseStatus(await statusText(main))
-check('S10 界面状态行与统计页今日数一致',
-  st10 !== null && st10.count === stat10?.todayCount,
-  `状态行=${st10?.count} 统计页=${stat10?.todayCount}`)
+  `主界面=${sum10?.todayCount} 统计页=${stat10?.todayCount}（旧口径按结束时间算是 ${countByEndedAt(d10.sessions)}）`)
+check('D3 跨零点的番茄：不计入今天（按开始时间属于昨天）',
+  sum10?.todayCount === before10,
+  `今天=${sum10?.todayCount} 期望=${before10}（这条属于昨天）`)
+
+// ================= D4：跨零点后主界面要自己对上 =================
+//
+// 用注入的时钟把"现在"推到第二天 23:59:55，等它真的跨过零点：
+// 主进程到了零点会重算并推一次，主界面的"今天"必须归零，
+// 而且和统计页一致（不能一个 0 一个 1）。
+const hasClock = await evaluate(main, 'typeof window.pomodoro.dev?.clockSet === "function"')
+if (!hasClock) {
+  check('D4 跨零点后主界面归零且与统计页一致', false,
+    '这个构建没有开发期的时钟口子（要用开发版跑这一条）')
+} else {
+  const now4 = new Date()
+  const target4 = new Date(
+    now4.getFullYear(), now4.getMonth(), now4.getDate() + 1, 23, 59, 55, 0
+  )
+  const offset4 = target4.getTime() - now4.getTime()
+  const beforeCount = sum10?.todayCount ?? 0
+  await evaluate(main, `window.pomodoro.dev.clockSet(${offset4})`)
+  await sleep(14000) // 跨过零点，等主进程那一推到达界面
+  const sum4 = await evaluate(main, 'window.pomodoro.records.summary()')
+  const stat4 = await evaluate(main, 'window.pomodoro.stats.get()')
+  const st4 = parseStatus(await statusText(main))
+  check('D4 跨零点后主界面归零，且与统计页一致',
+    sum4?.todayCount === 0 && stat4?.todayCount === 0 && st4?.count === 0,
+    `跨零点前=${beforeCount} 跨零点后 主界面=${sum4?.todayCount} 统计页=${stat4?.todayCount} 状态行=${st4?.count}`)
+  // 把时钟推回去，别影响后面的步骤
+  await evaluate(main, 'window.pomodoro.dev.clockSet(0)')
+  await sleep(800)
+}
 
 console.log('\n===== 汇总 =====')
 const failed = results.filter((r) => !r.ok)
 console.log(`共 ${results.length} 项，失败 ${failed.length} 项`)
 for (const f of failed) console.log(`  FAIL ${f.name} :: ${f.detail}`)
-process.exit(failed.length ? 1 : 0)
+finish(failed.length ? 1 : 0)

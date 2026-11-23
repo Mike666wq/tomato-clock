@@ -128,6 +128,11 @@ if (import.meta.env.DEV) {
     phase: 'focus' | 'short' | 'long',
     elapsed: number
   ): Promise<void> => ipcRenderer.invoke('timer:dev-seed', phase, elapsed)
+  // 开发期专用：把主进程的"现在"往前推，用来验证跨零点时界面会重算。
+  // 真的等一个午夜不现实，测试要能自动化。
+  ;(api as unknown as Record<string, unknown>)['dev'] = {
+    clockSet: (offsetMs: number): Promise<string> => ipcRenderer.invoke('clock:dev-set', offsetMs)
+  }
   // 开发期专用：正常退出（app.quit），用来自动化验证崩溃恢复（规格 E1）。
   // 托盘里的"退出"没法用脚本点，只能加个口子。
   ;(api.window as unknown as Record<string, unknown>)['devQuit'] = (): void =>

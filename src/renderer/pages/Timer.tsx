@@ -3,7 +3,7 @@
 // 状态全部来自主进程：界面只读快照、发动作。
 // 主进程不在的时候（比如直接在浏览器里开页面）退化为一个静态兜底状态。
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Ring } from '../components/Ring'
 import { Controls } from '../components/TimerControls'
 import { PresetBar } from '../components/PresetBar'
@@ -74,12 +74,27 @@ export function Timer(): React.JSX.Element {
     return () => ro.disconnect()
   }, [ringMax, ringMx, ringGap])
 
+  /**
+   * 重新拉一次汇总（v0.6 缺陷 D4）。
+   *
+   * 以前汇总只靠主进程推送：程序开着一夜不产生任何记录，
+   * 主界面就一直显示昨天的数字，而统计页（5 秒轮询）已经归零了 ——
+   * 同一个"今天"，两个数。
+   *
+   * 现在改成拉取式，并且在窗口重新获得焦点时也拉一次：
+   * 用户从别的程序切回来，看到的必须是现在的情况。
+   * 跨零点由主进程定时推一次（它知道零点什么时候到）。
+   */
+  const refreshSummary = useCallback(() => {
+    void window.pomodoro?.records.summary().then(setSummary)
+  }, [])
+
   // 订阅主进程状态
   useEffect(() => {
     const api = window.pomodoro
     if (!api) return
     void api.timer.getState().then(setState)
-    void api.records.summary().then(setSummary)
+    refreshSummary()
     void api.settings.get().then(setSettings)
     const offState = api.timer.onState(setState)
     const offSummary = api.records.onSummary(setSummary)
@@ -89,7 +104,14 @@ export function Timer(): React.JSX.Element {
       offSummary()
       offSettings()
     }
-  }, [])
+  }, [refreshSummary])
+
+  // 窗口获得焦点时重算一次汇总
+  useEffect(() => {
+    const onFocus = (): void => refreshSummary()
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [refreshSummary])
 
   // 阶段属性挂在 html 根元素上，派生色（底轨、柔光）才能跟着换色
   useEffect(() => {

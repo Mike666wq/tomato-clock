@@ -6,7 +6,8 @@
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, nativeTheme, screen } from 'electron'
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
-import { jsonStore } from './store/json-store'
+import { jsonStore, setStoreHooks } from './store/json-store'
+import { settingsStore } from './store/settings-store'
 import { setupScreenshot, setupIslandScreenshot } from './screenshot'
 import { Timer, type TimerAction } from './timer'
 import { createTray, type TrayController } from './tray'
@@ -18,6 +19,8 @@ import { getShortcutLabels, registerShortcuts, replaceShortcut, type ShortcutId 
 import { buildStats } from './stats'
 import { exportCsv } from './csv'
 import { log } from './logger'
+import { nowDate, setClockOffset } from './clock'
+import { localDateKey, msUntilNextMidnight, sessionDayKey } from '../shared/day'
 import {
   DEFAULT_SETTINGS,
   PHASE_LABEL,
@@ -73,6 +76,10 @@ let persistHeartbeat: NodeJS.Timeout | null = null
 let lastPersistedSeq = -1
 let isQuitting = false
 let recordAutoClose: NodeJS.Timeout | null = null
+/** 跨零点重算的定时器（到了零点推一次新的汇总） */
+let midnightTimer: NodeJS.Timeout | null = null
+/** 窗口位置/大小的落盘防抖：拖动时别一路写盘 */
+let boundsTimer: NodeJS.Timeout | null = null
 /** 渲染层还没加载完时收到的通知，先存着，等页面就绪再补发 */
 const pendingNotices: Notice[] = []
 
@@ -96,11 +103,13 @@ function broadcast(channel: string, payload?: unknown): void {
   }
 }
 
-/** 今天（本地日期）的 YYYY-MM-DD */
+/**
+ * 今天（本地日期）的 YYYY-MM-DD。
+ *
+ * 用注入的时钟：跨零点的行为要能测，不能只能等真的午夜。
+ */
 function todayKey(): string {
-  const d = new Date()
-  const p = (n: number): string => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+  return localDateKey(nowDate())
 }
 
 async function buildSummary(): Promise<RecordSummary> {
@@ -114,7 +123,10 @@ async function buildSummary(): Promise<RecordSummary> {
     if (s.kind !== 'focus') continue
     totalFocusSec += s.actualSec ?? 0
     if (!s.completed) continue
-    if (new Date(s.endedAt).toLocaleDateString('sv-SE') === today) {
+    // 「今天」按**开始时间**算（规格第四节）。
+    // 以前这里按结束时间算、统计页按开始时间算 ——
+    // 跨零点的那一条番茄，主界面说 0 个、统计页说 1 个（v0.6 缺陷 D3）。
+    if (sessionDayKey(s.startedAt) === today) {
       todayCount += 1
       todayFocusSec += s.actualSec ?? 0
     }
@@ -131,9 +143,34 @@ async function pushSummary(): Promise<void> {
 async function setIslandVisible(visible: boolean): Promise<void> {
   if (visible) island?.show()
   else island?.hide()
-  const current = await jsonStore.getSettings()
-  await jsonStore.saveSettings({ ...current, islandVisible: visible })
+  try {
+    await settingsStore.save({ islandVisible: visible })
+  } catch (err) {
+    log.error(`记灵动岛显示状态失败：${(err as Error).message}`)
+  }
   log.info(`灵动岛已${visible ? '显示' : '隐藏'}`)
+}
+
+/**
+ * 到了零点重算一次"今天"，推给所有窗口（v0.6 缺陷 D4）。
+ *
+ * 以前只在"落了记录"和"启动时"推汇总：程序开着一夜不产生记录，
+ * 主界面就一直显示昨天的数字，而统计页（5 秒轮询）已经归零了 ——
+ * 同一个"今天"，两个数。
+ *
+ * 用定时器而不是轮询：一个自用工具不该每 5 秒醒一次，费电。
+ */
+function scheduleMidnightRefresh(): void {
+  if (midnightTimer) {
+    clearTimeout(midnightTimer)
+    midnightTimer = null
+  }
+  const ms = msUntilNextMidnight(nowDate())
+  midnightTimer = setTimeout(() => {
+    midnightTimer = null
+    void pushSummary()
+    scheduleMidnightRefresh()
+  }, ms)
 }
 
 /** 立刻写一次快照（规格 E4：原子写） */
@@ -173,7 +210,7 @@ function schedulePersist(): void {
 /** 一个阶段自然跑完（或被跳过）：落记录 + 强提醒 + 打开记录卡片 */
 async function handlePhaseComplete(info: PhaseCompleteInfo): Promise<void> {
   // 主题：只有专注段挂主题，休息段不挂（方案第四节）
-  const settings = await jsonStore.getSettings()
+  const settings = await settingsStore.get()
   const topicId = info.topicId ?? null
   const topic = topicId ? settings.topics.find((t) => t.id === topicId) : undefined
 
@@ -244,7 +281,7 @@ function createWindow(): BrowserWindow {
   })
 
   // 恢复上次窗口位置（越界则摆回屏幕内）
-  void jsonStore.getSettings().then((settings) => {
+  void settingsStore.get().then((settings) => {
     // 窗口底色跟着主题走（纸感是浅底，别闪黑）
     win.setBackgroundColor(windowBgOf(settings))
     const w = settings.window ?? DEFAULT_SETTINGS.window
@@ -283,13 +320,36 @@ function createWindow(): BrowserWindow {
     }
   })
 
-  // 记住窗口位置与大小
-  const saveBounds = (): void => {
+  /**
+   * 记住窗口位置与大小。
+   *
+   * 只写 window 这一个字段，而且走设置单例的队列 ——
+   * 以前是"读整份设置 → 改 window → 写回整份"，用的那份快照可能比
+   * 主题改动更旧，于是拖一下窗口就把主题顶回去了（v0.6 缺陷 D2）。
+   *
+   * 拖动会连着触发几十次 resize/move，所以防抖 300ms。
+   */
+  const writeBounds = (): void => {
     if (win.isDestroyed() || win.isMinimized()) return
     const b = win.getBounds()
-    void jsonStore.getSettings().then(async (settings) => {
-      await jsonStore.saveSettings({ ...settings, window: { x: b.x, y: b.y, w: b.width, h: b.height } })
-    })
+    void settingsStore
+      .save({ window: { x: b.x, y: b.y, w: b.width, h: b.height } })
+      .catch((err) => log.error(`记窗口位置失败：${(err as Error).message}`))
+  }
+  const saveBounds = (): void => {
+    if (boundsTimer) clearTimeout(boundsTimer)
+    boundsTimer = setTimeout(() => {
+      boundsTimer = null
+      writeBounds()
+    }, 300)
+  }
+  /** 关窗口前要立刻写下去，不能等防抖 */
+  const flushBounds = (): void => {
+    if (boundsTimer) {
+      clearTimeout(boundsTimer)
+      boundsTimer = null
+    }
+    writeBounds()
   }
   win.on('resize', saveBounds)
   win.on('move', saveBounds)
@@ -298,7 +358,7 @@ function createWindow(): BrowserWindow {
   win.on('close', (e) => {
     if (!isQuitting) {
       e.preventDefault()
-      saveBounds()
+      flushBounds()
       win.hide()
     }
   })
@@ -354,6 +414,16 @@ function registerAllShortcuts(): void {
   }
 }
 
+/**
+ * 开发期：把 userData 指到别处，免得和用户正式版抢单实例锁。
+ *
+ * 必须在 requestSingleInstanceLock 之前改 —— 锁是按 userData 目录算的。
+ * 打包版里 import.meta.env.DEV 是 false，这一段整段摇掉，产物里没有这个口子。
+ */
+if (import.meta.env.DEV && process.env['POMODORO_USER_DATA']) {
+  app.setPath('userData', process.env['POMODORO_USER_DATA'])
+}
+
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
@@ -365,6 +435,15 @@ if (!app.requestSingleInstanceLock()) {
   app.on('second-instance', () => showWindow())
 
   void app.whenReady().then(async () => {
+    // 数据文件坏了要告诉用户（v0.6 缺陷 D6）：
+    // 改名备份 + 记 ERROR + 界面上给一条提示，不许静默当默认数据。
+    setStoreHooks({
+      onCorrupt: (backupPath, error) => {
+        pushNotice(`数据文件损坏，已备份为 ${path.basename(backupPath)}`, 'warn')
+        log.error(`数据文件损坏：${error.message}`)
+      }
+    })
+
     mainWindow = createWindow()
     reminder = createReminder()
     // 灵动岛：常驻贴顶的透明胶囊（v0.2）
@@ -381,7 +460,7 @@ if (!app.requestSingleInstanceLock()) {
       }
     })
 
-    const settings = await jsonStore.getSettings()
+    const settings = await settingsStore.init()
     activePresetId = settings.activePresetId
     timer = new Timer(timerConfigOf(settings))
     // 灵动岛上次被藏起来过 → 这次也不显示
@@ -460,55 +539,71 @@ if (!app.requestSingleInstanceLock()) {
       })
     })
 
-    ipcMain.handle('settings:get', () => jsonStore.getSettings())
+    ipcMain.handle('settings:get', () => settingsStore.get())
 
-    // 保存设置。计时进行中改时长/切模板只影响下一段（Timer 内部处理），这里只落盘 + 通知计时器
+    /**
+     * 保存设置。
+     *
+     * 走设置单例（v0.6 缺陷 D1）：所有写排队、合并的是内存里的当前值，
+     * 所以两个不相干的设置同时保存不会再互相覆盖。
+     *
+     * 写盘前会校验：传进来一个坏值（比如 uiTheme: 123），
+     * **磁盘一个字节都不变**，界面上给一条提示。
+     */
     ipcMain.on('settings:save', (_e, patch: Partial<Settings>) => {
-      void jsonStore.getSettings().then(async (current) => {
-        const next: Settings = { ...current, ...patch }
-        await jsonStore.saveSettings(next)
-        timer?.updateSettings(timerConfigOf(next))
-        activePresetId = next.activePresetId
-        // 设置里的「显示灵动岛」开关要立刻生效，不用重启
-        if (patch.islandVisible !== undefined && patch.islandVisible !== current.islandVisible) {
-          if (patch.islandVisible) island?.show()
-          else island?.hide()
-        }
-        // 「显示音乐控制」同样立刻生效：开 = 拉起子进程，关 = 杀掉
-        if (
-          patch.showMusicControl !== undefined &&
-          patch.showMusicControl !== current.showMusicControl
-        ) {
-          if (patch.showMusicControl) music?.enable()
-          else music?.disable()
-        }
-        // 切模板/改时长后，所有窗口都要知道当前模板变了
-        broadcast('settings:changed', next)
-        // 换主题要立刻换窗口底色，不然换完还有一层旧底色透出来
-        if (patch.uiTheme !== undefined || patch.uiMode !== undefined) {
-          mainWindow?.setBackgroundColor(windowBgOf(next))
-        }
-        if (patch.launchAtLogin !== undefined && patch.launchAtLogin !== current.launchAtLogin) {
-          try {
-            app.setLoginItemSettings({
-              openAtLogin: next.launchAtLogin,
-              path: process.execPath,
-              args: app.isPackaged ? [] : [app.getAppPath()]
-            })
-            log.info(`开机自启已${next.launchAtLogin ? '开启' : '关闭'}`)
-          } catch (err) {
-            log.error(`设置开机自启失败: ${(err as Error).message}`)
-            pushNotice('设置开机自启失败', 'warn')
+      // 改动前的值：用来判断"灵动岛/音乐/开机自启"这些要不要立刻生效
+      const before = settingsStore.peek()
+      void settingsStore
+        .save(patch)
+        .then(async (next) => {
+          const current = before
+          timer?.updateSettings(timerConfigOf(next))
+          activePresetId = next.activePresetId
+          // 设置里的「显示灵动岛」开关要立刻生效，不用重启
+          if (patch.islandVisible !== undefined && patch.islandVisible !== current.islandVisible) {
+            if (patch.islandVisible) island?.show()
+            else island?.hide()
           }
-        }
-      })
+          // 「显示音乐控制」同样立刻生效：开 = 拉起子进程，关 = 杀掉
+          if (
+            patch.showMusicControl !== undefined &&
+            patch.showMusicControl !== current.showMusicControl
+          ) {
+            if (patch.showMusicControl) music?.enable()
+            else music?.disable()
+          }
+          // 切模板/改时长后，所有窗口都要知道当前模板变了
+          broadcast('settings:changed', next)
+          // 换主题要立刻换窗口底色，不然换完还有一层旧底色透出来
+          if (patch.uiTheme !== undefined || patch.uiMode !== undefined) {
+            mainWindow?.setBackgroundColor(windowBgOf(next))
+          }
+          if (patch.launchAtLogin !== undefined && patch.launchAtLogin !== current.launchAtLogin) {
+            try {
+              app.setLoginItemSettings({
+                openAtLogin: next.launchAtLogin,
+                path: process.execPath,
+                args: app.isPackaged ? [] : [app.getAppPath()]
+              })
+              log.info(`开机自启已${next.launchAtLogin ? '开启' : '关闭'}`)
+            } catch (err) {
+              log.error(`设置开机自启失败: ${(err as Error).message}`)
+              pushNotice('设置开机自启失败', 'warn')
+            }
+          }
+        })
+        .catch((err: Error) => {
+          // 校验没过 / 写盘失败：磁盘保持原样，界面上给一句人话
+          log.error(`保存设置失败：${err.message}`)
+          pushNotice(`设置没保存：${err.message}`, 'warn')
+        })
     })
 
     // 统计：今日按小时分布 / 近 7 天趋势 / 打断原因排行 / 主题维度
     ipcMain.handle('stats:get', async () => {
       const [sessions, settings] = await Promise.all([
         jsonStore.listSessions(),
-        jsonStore.getSettings()
+        settingsStore.get()
       ])
       return buildStats(sessions, settings.topics)
     })
@@ -554,6 +649,14 @@ if (!app.requestSingleInstanceLock()) {
       ipcMain.handle('timer:dev-seed', (_e, phase: PhaseCompleteInfo['phase'], elapsed: number) =>
         timer?.devSeed?.(phase, elapsed)
       )
+      // 开发期：把"现在"往前推（毫秒），用来验证跨零点时界面会重算。
+      // 真的等一个午夜不现实，测试要能自动化。
+      ipcMain.handle('clock:dev-set', (_e, offsetMs: number) => {
+        setClockOffset(Number(offsetMs) || 0)
+        // 时钟变了，"下一个零点"也跟着变 → 重新安排跨点点的重算
+        scheduleMidnightRefresh()
+        return nowDate().toISOString()
+      })
       // 开发期：正常退出（= app.quit，会走 before-quit 落盘）。
       // 用来自动化验证崩溃恢复（规格 E1）：托盘里的"退出"没法用脚本点。
       ipcMain.on('app:dev-quit', () => {
@@ -588,6 +691,9 @@ if (!app.requestSingleInstanceLock()) {
     // 启动时把汇总推给界面（重启后底部状态行要能恢复）
     void pushSummary()
 
+    // 安排跨零点的重算：程序开着一夜，明天早上"今天"要自己对上（v0.6 缺陷 D4）
+    scheduleMidnightRefresh()
+
     if (import.meta.env.DEV) {
       setupScreenshot(mainWindow)
       if (island) setupIslandScreenshot(island.win)
@@ -609,6 +715,10 @@ if (!app.requestSingleInstanceLock()) {
   app.on('before-quit', () => {
     isQuitting = true
     if (recordAutoClose) clearTimeout(recordAutoClose)
+    if (midnightTimer) {
+      clearTimeout(midnightTimer)
+      midnightTimer = null
+    }
     // 退出前落一次盘（规格 E1）。
     // force=true = 按"退出即暂停"记录（E0）：关掉期间时间不前进，
     // 重新打开就是暂停态，剩余 = 退出这一刻的剩余。

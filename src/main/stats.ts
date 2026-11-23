@@ -5,6 +5,8 @@
 import type { InterruptKind, Session, StatsData, TopicStat } from '../shared/types'
 import type { Topic } from '../shared/topics'
 import { UNTITLED } from '../shared/topics'
+import { localDateKey, sessionDayKey } from '../shared/day'
+import { nowDate } from './clock'
 
 export type { StatsData }
 
@@ -14,14 +16,9 @@ const INTERRUPT_LABELS: Record<InterruptKind, string> = {
   external: '外部打断'
 }
 
-function localDateKey(d: Date): string {
-  const p = (n: number): string => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
-}
-
 /** 本周一 0 点（本地） */
 function weekStart(): Date {
-  const d = new Date()
+  const d = nowDate()
   const day = d.getDay() // 0=周日
   const diff = (day + 6) % 7 // 周一为 0
   d.setDate(d.getDate() - diff)
@@ -91,7 +88,7 @@ function toStats(buckets: Map<string | null, Bucket>, topics: Topic[]): TopicSta
 }
 
 export function buildStats(sessions: Session[], topics: Topic[] = []): StatsData {
-  const todayKey = localDateKey(new Date())
+  const todayKey = localDateKey(nowDate())
 
   const todayByHour = new Array<number>(24).fill(0)
   const byDate = new Map<string, number>()
@@ -103,7 +100,9 @@ export function buildStats(sessions: Session[], topics: Topic[] = []): StatsData
 
   for (const s of sessions) {
     const started = new Date(s.startedAt)
-    const dayKey = localDateKey(started)
+    // 「今天」按**开始时间**算 —— 和主界面的汇总用同一个函数（shared/day.ts）。
+    // 两处各算一遍就是 v0.6 缺陷 D3 的根源。
+    const dayKey = sessionDayKey(s.startedAt)
 
     if (s.kind === 'focus') {
       // 规格 F3：被跳过的段不算"专注时间"。
@@ -130,7 +129,7 @@ export function buildStats(sessions: Session[], topics: Topic[] = []): StatsData
   // 近 7 天
   const last7Days: StatsData['last7Days'] = []
   for (let i = 6; i >= 0; i--) {
-    const d = new Date()
+    const d = nowDate()
     d.setDate(d.getDate() - i)
     const key = localDateKey(d)
     last7Days.push({
@@ -150,7 +149,7 @@ export function buildStats(sessions: Session[], topics: Topic[] = []): StatsData
 
   // 今日概览：按主题分组
   const todaySessions = sessions.filter(
-    (s) => s.kind === 'focus' && s.completed && localDateKey(new Date(s.startedAt)) === todayKey
+    (s) => s.kind === 'focus' && s.completed && sessionDayKey(s.startedAt) === todayKey
   )
   const todayBuckets = groupByTopic(todaySessions, topics)
   const todayTopics = [...todayBuckets.entries()]
