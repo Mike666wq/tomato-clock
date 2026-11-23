@@ -1,0 +1,276 @@
+<!doctype html>
+<!--
+  v0.5 第三轮 · 风格一 · 纸感（Paper）
+
+  一句话自我描述：这是一张纸。
+
+  视觉语言与 A/B 两版完全不同：暖白纸底、墨黑字、砖红、
+  2px 极细弧（没有底轨）、120px 衬线数字、文字按钮（主按钮加下划线）、
+  无渐变无阴影无发光、几乎无圆角。
+
+  调色板写在下面的 :root 里（变量名带 p- 前缀，避免和 tokens.css 撞）。
+  将来实现时整块搬进 tokens.css，做成 [data-style='paper'] 主题块。
+  规则不变：派生色用 color-mix，不引入新色相；颜色不直接写在组件里。
+
+  用法：?screen=main & ?size=small
+-->
+<html lang="zh-CN" data-phase="focus">
+  <head>
+    <meta charset="utf-8" />
+    <title>v0.5 纸感</title>
+    <link rel="stylesheet" href="../../src/renderer/styles/tokens.css" />
+    <style>
+      :root {
+        --p-bg: #f4f1ea;
+        --p-ink: #17170f;
+        --p-ink-2: #8a8578;
+        --p-accent: #b8472c;
+        --p-line: #e2ddd0;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #d9d5cb;
+        font-family: var(--font-ui);
+        color: var(--p-ink);
+        display: grid;
+        place-items: center;
+      }
+
+      .frame {
+        --ring: 360px;
+        width: 480px;
+        height: 620px;
+        display: flex;
+        flex-direction: column;
+        background: var(--p-bg);
+        overflow: hidden;
+        box-shadow: 0 18px 60px rgba(40, 35, 25, 0.26);
+      }
+      .frame[data-size='small'] {
+        --ring: 330px;
+        width: 420px;
+        height: 560px;
+      }
+
+      /* ---- 顶栏 ---- */
+      .top {
+        flex: none;
+        height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 30px;
+      }
+      .stage {
+        font-size: 12px;
+        letter-spacing: 0.24em;
+        color: var(--p-ink-2);
+      }
+      .more {
+        color: var(--p-ink-2);
+        font-size: 15px;
+        letter-spacing: 0.14em;
+        line-height: 1;
+      }
+
+      /* ---- 圆环：2px 极细弧，没有底轨 ---- */
+      .ring-area {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 0;
+      }
+      .ring {
+        position: relative;
+        height: min(100%, var(--ring));
+        width: auto;
+        aspect-ratio: 1;
+        max-width: 100%;
+      }
+      .ring svg {
+        width: 100%;
+        height: 100%;
+        display: block;
+        transform: rotate(-90deg);
+      }
+      .ring__arc {
+        fill: none;
+        stroke: var(--p-accent);
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-dasharray: 942;
+        stroke-dashoffset: 236;
+      }
+      .ring__center {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+      .time {
+        font-family: Georgia, 'Songti SC', 'SimSun', serif;
+        font-size: 104px; /* 120px 会让数字两端压到细弧上，退到 104 */
+        font-weight: 400;
+        line-height: 1;
+        letter-spacing: -0.01em;
+        color: var(--p-ink);
+      }
+      .task {
+        margin-top: 14px;
+        font-size: 13px;
+        letter-spacing: 0.04em;
+        color: var(--p-ink-2);
+      }
+
+      /* ---- 按钮：文字按钮，主按钮一条 1px 下划线 ---- */
+      .controls {
+        flex: none;
+        display: flex;
+        align-items: baseline;
+        justify-content: center;
+        gap: 46px;
+        padding: 20px 0 18px;
+      }
+      .tbtn {
+        font: 400 14px/1 var(--font-ui);
+        letter-spacing: 0.06em;
+        color: var(--p-ink-2);
+        background: none;
+        border: 0;
+        padding: 6px 2px;
+      }
+      .tbtn--main {
+        font-size: 19px;
+        color: var(--p-ink);
+        border-bottom: 1px solid var(--p-ink);
+        padding-bottom: 6px;
+      }
+
+      /* ---- 模板 / 主题：也是文字，选中的带一条砖红下划线 ---- */
+      .rows {
+        flex: none;
+        padding: 0 30px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .row {
+        display: flex;
+        align-items: baseline;
+        gap: 18px;
+        font-size: 12px;
+      }
+      .row__label {
+        flex: none;
+        width: 26px;
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        color: var(--p-ink-2);
+      }
+      .chip {
+        color: var(--p-ink-2);
+        padding-bottom: 2px;
+      }
+      .chip--on {
+        color: var(--p-ink);
+        border-bottom: 1px solid var(--p-accent);
+      }
+
+      /* ---- 状态行 ---- */
+      .status {
+        flex: none;
+        text-align: center;
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        color: var(--p-ink-2);
+        padding: 20px 0 16px;
+      }
+
+      /* ---- 导航：一条 1px 横线 + 三个词 ---- */
+      .nav {
+        flex: none;
+        height: 50px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 52px;
+        border-top: 1px solid var(--p-line);
+        font-size: 12px;
+        letter-spacing: 0.1em;
+      }
+      .nav__item {
+        color: var(--p-ink-2);
+      }
+      .nav__item--on {
+        color: var(--p-ink);
+      }
+    </style>
+  </head>
+  <body>
+    <section class="frame" data-for="main">
+      <header class="top">
+        <span class="stage">专注</span>
+        <span class="more">⋯</span>
+      </header>
+
+      <div class="ring-area">
+        <div class="ring">
+          <svg viewBox="0 0 320 320">
+            <circle class="ring__arc" cx="160" cy="160" r="150" />
+          </svg>
+          <div class="ring__center">
+            <span class="time">25:00</span>
+            <span class="task">写方案</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <span class="tbtn">重置</span>
+        <span class="tbtn tbtn--main">开始</span>
+        <span class="tbtn">跳过</span>
+      </div>
+
+      <div class="rows">
+        <div class="row">
+          <span class="row__label">模板</span>
+          <span class="chip chip--on">经典</span>
+          <span class="chip">深度</span>
+          <span class="chip">冲刺</span>
+        </div>
+        <div class="row">
+          <span class="row__label">主题</span>
+          <span class="chip chip--on">写代码</span>
+          <span class="chip">读论文</span>
+          <span class="chip">未分类</span>
+        </div>
+      </div>
+
+      <div class="status">今天 2 个 · 50 分钟</div>
+
+      <nav class="nav">
+        <span class="nav__item nav__item--on">计时</span>
+        <span class="nav__item">统计</span>
+        <span class="nav__item">设置</span>
+      </nav>
+    </section>
+
+    <script>
+      const q = new URLSearchParams(location.search)
+      const size = q.get('size') || 'normal'
+      document.querySelectorAll('[data-for]').forEach((el) => {
+        if (size === 'small') el.dataset.size = 'small'
+      })
+    </script>
+  </body>
+</html>
