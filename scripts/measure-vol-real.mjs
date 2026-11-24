@@ -179,25 +179,60 @@ async function uiVolume() {
 // ⚠ **每次都重置**：别的验证脚本（probe-degraded、measure-music-always-on）
 //   也会挪岛，共享同一个开发实例 → 位置会被改掉。
 //   这里统一挪到同一个地方，脚本之间就互不干扰。
+//
+// ⚠ **打包版没有 devOffset**（开发期口子被编译掉了）：
+//   那时不能挪岛，靠下面的**窗口枚举**定位 ——
+//   但机器上还有用户那份 0.3.6 在跑，**两个岛会重叠**，
+//   所以必须先把用户那份关掉，或者靠"窗口标题 + 进程路径"认出被测那个。
 const DEV_OFFSET_X = -500
-await evaluate(island, `window.island?.island?.devOffset?.(${DEV_OFFSET_X})`)
-await sleep(600)
+const devOffsetAvailable = await evaluate(
+  island,
+  `typeof window.island?.island?.devOffset === 'function'`
+)
+if (devOffsetAvailable) {
+  await evaluate(island, `window.island?.island?.devOffset?.(${DEV_OFFSET_X})`)
+  await sleep(600)
+} else {
+  console.log('  [诊断] 打包版：没有 devOffset，岛不能挪开')
+}
 
 /**
  * 岛的窗口屏幕坐标。
  *
  * ⚠ **打包版没有 devBounds**（开发期口子被编译掉了）→ 退回**枚举窗口**取 rect。
  *   两种来源都是 DIP，可以直接用。
+ *
+ * ⚠ **枚举窗口必须按进程路径过滤**：机器上可能同时跑着用户自己装的那份，
+ *   而每个岛的窗口标题都是同一个「灵动岛」——
+ *   只按标题找会抓到**用户那份**，鼠标点过去点到的也是它，
+ *   测出来的东西跟被测的打包版没关系。
+ *   被测实例的 exe 路径从 .tmp/instance.json 读。
  */
 async function getIslandBounds() {
   const dev = await evaluate(island, `window.island?.island?.devBounds?.() ?? null`)
   if (dev && typeof dev.x === 'number') return dev
-  // 打包版：枚举「灵动岛」窗口
+  // 打包版：按**进程路径**枚举「灵动岛」窗口
   const { execFileSync } = await import('node:child_process')
+  const { readFileSync } = await import('node:fs')
+  let exePathLike = ''
+  try {
+    const inst = JSON.parse(readFileSync(path.join(process.cwd(), '.tmp', 'instance.json'), 'utf-8'))
+    exePathLike = inst.exePath ?? ''
+  } catch {
+    /* 读不到就退回只按标题找 */
+  }
   try {
     const raw = execFileSync(
       'powershell',
-      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(process.cwd(), 'scripts', 'find-window.ps1'), '灵动岛'],
+      [
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        path.join(process.cwd(), 'scripts', 'find-window-by-path.ps1'),
+        '灵动岛',
+        exePathLike
+      ],
       { encoding: 'utf-8', timeout: 20000 }
     ).trim()
     const m = /(-?\d+),(-?\d+),(-?\d+),(-?\d+)/.exec(raw)
@@ -244,14 +279,23 @@ if (await evaluate(island, `!!document.querySelector('.island__vol')`)) {
   await sleep(3600)
 }
 
+// ⚠ **打包版没有 devFake**（开发期口子被编译掉了）：
+//   开发版靠假状态把音乐行叫出来（不然没有会话时那一行是空的），
+//   打包版只能用**真状态**（真实音量是系统级的，跟有没有会话无关，
+//   所以打包版的音乐行一直都在，音量按钮也一直在）。
+const hasDevFake = await evaluate(island, `typeof window.island?.media?.devFake === 'function'`)
+console.log(`  [诊断] 有 devFake（开发版口子）= ${hasDevFake}`)
+
+const FAKE_STATE = `{
+  source: 'Tencent.QQMusic', title: '繁星之梦', artist: '唐云歌',
+  playing: true, volume: 35, volumeOk: true, pending: ''
+}`
+
 await evaluate(
   island,
   `(() => {
     window.island.settings.save({ showMusicControl: true })
-    window.island.media.devFake({
-      source: 'Tencent.QQMusic', title: '繁星之梦', artist: '唐云歌',
-      playing: true, volume: 35, volumeOk: true, pending: ''
-    })
+    ${hasDevFake ? `window.island.media.devFake(${FAKE_STATE})` : ''}
     window.island.island.setMode('expanded', true)
     return true
   })()`
@@ -282,6 +326,13 @@ async function ensureExpanded() {
 const gotExpanded = await ensureExpanded()
 console.log(`  [诊断] 岛展开 = ${gotExpanded}`)
 
+// ⚠ **展开成功后立刻缓存窗口位置**：这时窗口才是展开态的尺寸（360 宽）。
+//   窗口枚举每次跑都拿"那一刻"的尺寸 ——
+//   岛收起时是 188 宽、展开时 360 宽，位置也会重新居中。
+//   缓存错了，后面算出来的按钮坐标就在岛外面（实测踩过）。
+await lockExpandedBounds()
+console.log(`  [诊断] 展开后窗口位置（缓存）=${JSON.stringify(expandedBounds)}`)
+
 let musicReady = false
 for (let i = 0; i < 25; i++) {
   await sleep(200)
@@ -293,16 +344,16 @@ for (let i = 0; i < 25; i++) {
     musicReady = true
     break
   }
-  // 假状态被 helper 的空 state 清掉时，重新打一次
-  await evaluate(
-    island,
-    `window.island.media.devFake({
-      source: 'Tencent.QQMusic', title: '繁星之梦', artist: '唐云歌',
-      playing: true, volume: 35, volumeOk: true, pending: ''
-    })`
-  )
+  // 假状态被 helper 的空 state 清掉时，重新打一次（只有开发版有假状态）
+  if (hasDevFake) {
+    await evaluate(island, `window.island.media.devFake(${FAKE_STATE})`)
+  }
 }
-check('音乐行出现（假状态 + 展开）', musicReady, `ready=${musicReady}`)
+check(
+  hasDevFake ? '音乐行出现（假状态 + 展开）' : '音乐行出现（真状态 + 展开）',
+  musicReady,
+  `ready=${musicReady}`
+)
 if (!musicReady) {
   console.log(
     '  [诊断] expanded=',
@@ -331,8 +382,36 @@ async function currentBounds() {
   return await getIslandBounds()
 }
 
+/**
+ * 展开后的窗口位置（**缓存**）。
+ *
+ * ⚠ **用 var 而不是 let**：`let` 有暂时性死区（TDZ）——
+ *   下面展开成功后就会调用 lockExpandedBounds，
+ *   而声明在后面的话会报 "Cannot access 'expandedBounds' before initialization"。
+ *   `var` 没有这个问题（值是 undefined，逻辑一样）。
+ */
+var expandedBounds = null
+
+/**
+ * 展开后的窗口位置（**缓存**）。
+ *
+ * ⚠ **为什么缓存**：窗口枚举（find-window-by-path.ps1）每次跑都拿到
+ *   **那一刻**的窗口尺寸 —— 岛展开/收起时宽度会变（189 ↔ 360），
+ *   窗口重新贴顶居中，x 也跟着变。
+ *   拖动滑条的过程中窗口可能因为别的原因变化，
+ *   于是"算坐标用的窗口位置"和"实际窗口位置"对不上 → 点空。
+ *
+ *   展开之后缓存一次，拖动全程用同一个值 —— 期间窗口不会变
+ *   （音乐行展开后尺寸是固定的）。
+ *
+ * ⚠ **必须在展开成功后立刻缓存**：这时窗口才是展开态的尺寸。
+ *   （实测：在展开前缓存会拿到收起态的 188 宽 → 算出的按钮坐标在岛外面。）
+ */
+
 async function screenPoint(selector, ratio) {
-  const b = await currentBounds()
+  // ⚠ 优先用**缓存的展开位置**：窗口枚举每次拿到的是"那一刻"的尺寸，
+  //   岛展开/收起时宽度会变并重新居中 —— 拖动过程中用错位置会点到空处。
+  const b = expandedBounds ?? (await currentBounds())
   if (!b) return null
   const rect = await evaluate(
     island,
@@ -351,9 +430,39 @@ async function screenPoint(selector, ratio) {
   }
 }
 
+/**
+ * 展开后的窗口位置（**缓存**）。
+ *
+ * ⚠ **为什么缓存**：窗口枚举（find-window-by-path.ps1）每次跑都拿到
+ *   **那一刻**的窗口尺寸 —— 岛展开/收起时宽度会变（189 ↔ 360），
+ *   窗口重新贴顶居中，x 也跟着变。
+ *   拖动滑条的过程中窗口可能因为别的原因变化，
+ *   于是"算坐标用的窗口位置"和"实际窗口位置"对不上 → 点空。
+ *
+ *   展开之后缓存一次，拖动全程用同一个值 —— 期间窗口不会变
+ *   （音乐行展开后尺寸是固定的）。
+ *
+ * ⚠ **必须在展开成功后立刻缓存**：这时窗口才是展开态的尺寸。
+ *   （实测：在展开前缓存会拿到收起态的 188 宽 → 算出的按钮坐标在岛外面。）
+ */
+async function lockExpandedBounds() {
+  if (expandedBounds) return expandedBounds
+  for (let i = 0; i < 10; i++) {
+    const b = await currentBounds()
+    if (b && b.width > 250) {
+      expandedBounds = b
+      return b
+    }
+    await sleep(200)
+  }
+  expandedBounds = await currentBounds()
+  return expandedBounds
+}
+
 /** 按 aria-label 找按钮，返回屏幕坐标 */
 async function screenPointByLabel(label) {
-  const b = await currentBounds()
+  // ⚠ 用**缓存的展开位置**（见 lockExpandedBounds 的注释）
+  const b = expandedBounds ?? (await currentBounds())
   if (!b) return null
   const rect = await evaluate(
     island,
@@ -422,7 +531,54 @@ if (original === null) {
   console.log('  [诊断] 独立进程读不到系统音量 —— 音频设备或默认端点有问题')
 }
 
+// ⚠ **滑条 3 秒不动会自动收起**（VOL_HIDE_MS）。
+//   上面"拖动前"的核对要起独立进程读音量，耗掉一两秒 ——
+//   滑条可能已经收起来了，后面就找不到滑条元素（实测打包版就栽在这）。
+//   所以核对完**重新点开一次**，再立刻开始拖。
+const sliderGone = !(await evaluate(island, `!!document.querySelector('.island__vol')`))
+if (sliderGone) {
+  console.log('  [诊断] 滑条被自动收起了，重新点开')
+  const again = await screenPointByLabel('音量')
+  if (again) {
+    await mouse(`move ${again.x} ${again.y}`)
+    await sleep(250)
+    await mouse(`down ${again.x} ${again.y}`)
+    await sleep(100)
+    await mouse('up')
+    await sleep(300)
+  }
+}
+const sliderOpen = await evaluate(island, `!!document.querySelector('.island__vol')`)
+check('滑条是开着的（能拖）', sliderOpen === true, `.island__vol=${sliderOpen}`)
+
+// ⚠⚠ **点开滑条后窗口位置会变**：歌名区被换成滑条，宽度变了 →
+//   窗口重新贴顶居中 → **x 也变了**。
+//   用点开之前的坐标去按滑条 → 按到空处 → 滑条没被"交互"到 →
+//   3 秒不动自动收起的定时器照跑 → **滑条在拖动开始前就消失了**
+//   （实测：按下后 `.island__vol` 直接没了，岛还展开着）。
+//
+//   所以：**点开之后必须重新取一次窗口位置**，用它算滑条坐标。
+expandedBounds = null
+await lockExpandedBounds()
+console.log(`  [诊断] 点开滑条后的窗口位置（重新取）=${JSON.stringify(expandedBounds)}`)
+
 const start = await screenPoint('.island__vol-track', 0.8)
+if (!start) {
+  console.log('  [诊断] 拿不到滑条的屏幕坐标（滑条元素找不到或窗口位置拿不到）')
+} else {
+  // ⚠ 按下之前先确认那个点上确实是滑条（别按了个寂寞）。
+  //   滑条是**独立元素**，按错地方 → 触发不了它的 pointerdown →
+  //   指针捕获没建立 → 也重置不了"3 秒自动收起"的定时器 → 滑条自己消失。
+  const hit = await evaluate(
+    island,
+    `(() => {
+      const el = document.elementFromPoint(${start.x - expandedBounds.x}, ${start.y - expandedBounds.y})
+      if (!el) return 'null'
+      return (el.className || el.tagName || '') + ' / ' + (el.getAttribute('aria-label') || '')
+    })()`
+  )
+  console.log(`  [诊断] 滑条起点的坐标=${JSON.stringify(start)}，那个点上=${hit}`)
+}
 await mouse(`move ${start.x} ${start.y}`)
 await sleep(250)
 await mouse(`down ${start.x} ${start.y}`)
@@ -439,6 +595,22 @@ let allMatch = true
 const detail = []
 for (const s of steps) {
   const p = await screenPoint('.island__vol-track', s.ratio)
+  if (!p) {
+    // ⚠ 滑条元素在拖动过程中不见了（3 秒不动自动收起 / 按下后重建）。
+    //   没有它就算失败，但要把原因说清楚，不能是个 null 崩掉。
+    allMatch = false
+    detail.push(`${s.ratio * 100}%→拿不到滑条坐标`)
+    const why = await evaluate(
+      island,
+      `(() => ({
+        vol: !!document.querySelector('.island__vol'),
+        track: !!document.querySelector('.island__vol-track'),
+        expanded: !!document.querySelector('.island--expanded')
+      }))()`
+    )
+    console.log(`  [诊断] 拿不到滑条坐标时的界面状态：${JSON.stringify(why)}`)
+    break
+  }
   await mouse(`move ${p.x} ${p.y}`)
   // ⚠ **要等它稳定，不能读一次就下结论**：
   //   helper 设完音量后还有回读/推送的滞后，

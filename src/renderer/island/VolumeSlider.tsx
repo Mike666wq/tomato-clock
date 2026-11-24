@@ -64,6 +64,16 @@ export default function VolumeSlider({ volume, onChange, onInteract }: Props): R
     (e: React.PointerEvent<HTMLSpanElement>) => {
       // 岛整体是"点一下就切计时"的大开关，滑条必须自己拦住
       e.stopPropagation()
+      // ⚠⚠ **click 事件也要拦**（2026-11-24 下午实测踩到）：
+      //   岛容器的 onClick 是"滑条开着时，点岛别处 = 收起滑条"。
+      //   pointer 事件被 stopPropagation 拦住了，**但 click 是另一个事件**，
+      //   它照样冒泡到岛容器 → 按下滑条的那一刻，滑条就被收走了。
+      //   表现：点住滑条 → 滑条当场消失 → 拖不动。
+      //
+      //   为什么之前没发现：开发版验包时鼠标点的是**另一个**岛
+      //   （用户那份 0.3.6 也在跑，两个岛重叠），
+      //   命中谁不确定 —— 测出来的东西可能根本不是被测的那个。
+      e.nativeEvent.stopPropagation()
       // **指针捕获**：按下之后，这个元素接管后续的 pointermove/pointerup，
       // 哪怕指针已经移出轨道。没有它，拖到一半移出去就断了。
       try {
@@ -152,6 +162,12 @@ export default function VolumeSlider({ volume, onChange, onInteract }: Props): R
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
+      onClick={(e) => {
+        // ⚠ **click 必须拦住**（见 onPointerDown 的注释）：
+        //   岛容器的 onClick 是"滑条开着时，点岛别处 = 收起滑条"。
+        //   不拦的话，拖完松手那一刻 click 冒泡上去 → 滑条被收走。
+        e.stopPropagation()
+      }}
       onWheel={onWheel}
     >
       <span className="island__vol-track" ref={trackRef}>

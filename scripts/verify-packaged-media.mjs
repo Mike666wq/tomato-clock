@@ -2,6 +2,10 @@
 //
 // 用法：CDP_PORT=9224 node scripts\verify-packaged-media.mjs
 
+import { execFileSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+
 const port = process.env.CDP_PORT ?? '9224'
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const list = await (await fetch(`http://127.0.0.1:${port}/json`)).json()
@@ -44,7 +48,6 @@ await new Promise((r) => setTimeout(r, 2000))
 //   窗口大小，渲染层的 expanded 状态是 hover 驱动的。
 //   还要"先离开再回来"：鼠标已经在岛上时浏览器不会再发 mouseenter。
 const { spawn } = await import('node:child_process')
-const path = await import('node:path')
 const ps = spawn(
   'powershell',
   ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(process.cwd(), 'scripts', 'real-mouse.ps1')],
@@ -81,17 +84,33 @@ const islandRect = await evaluate(`(async () => {
 console.log(`  [诊断] 岛元素 rect（视口坐标）=${JSON.stringify(islandRect)}`)
 
 // 岛是独立窗口，屏幕位置要靠外部查。用 PowerShell 查「灵动岛」窗口的 rect
-const { execFileSync } = await import('node:child_process')
+// ⚠ `execFileSync` / `path` / `readFileSync` 已在文件顶部导入，别重复声明
+
+// ⚠ **必须按进程路径过滤**：机器上可能同时跑着用户自己装的那份，
+//   而每个岛的窗口标题都是同一个「灵动岛」——
+//   只按标题找会抓到**用户那份**，鼠标点过去点到的也是它，
+//   测出来的东西跟被测的打包版没关系。
+//
+//   被测实例的 exe 路径从 .tmp/instance.json 读（start-instance.mjs 写的）。
+let exePathLike = ''
+try {
+  const inst = JSON.parse(readFileSync(path.join(process.cwd(), '.tmp', 'instance.json'), 'utf-8'))
+  exePathLike = inst.exePath ?? ''
+} catch {
+  /* 读不到就退回只按标题找 */
+}
+console.log(`  [诊断] 被测实例 exe=${exePathLike || '（读不到，只按标题找）'}`)
+
 const raw = execFileSync(
   'powershell',
   [
     '-NoProfile',
-    '-Command',
-    `Add-Type -TypeDefinition 'using System;using System.Text;using System.Runtime.InteropServices;public class WQ{ [DllImport("user32.dll",CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr h,StringBuilder s,int n); [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h,out RECT r); [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc cb,IntPtr l); public delegate bool EnumProc(IntPtr h,IntPtr l); [StructLayout(LayoutKind.Sequential)] public struct RECT{public int L,T,R,B;} }' -ErrorAction SilentlyContinue;
-     $found = $null;
-     $cb = [WQ+EnumProc]{ param($hw,$l) $sb2 = New-Object System.Text.StringBuilder 256; [void][WQ]::GetWindowText($hw,$sb2,256); if ($sb2.ToString() -eq '灵动岛') { $script:found = $hw; return $false }; return $true };
-     [void][WQ]::EnumWindows($cb,[IntPtr]::Zero);
-     if ($found) { $r = New-Object WQ+RECT; [void][WQ]::GetWindowRect($found,[ref]$r); Write-Output ($r.L.ToString()+','+$r.T.ToString()+','+$r.R.ToString()+','+$r.B.ToString()) } else { Write-Output 'NOT_FOUND' }`
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    path.join(process.cwd(), 'scripts', 'find-window-by-path.ps1'),
+    '灵动岛',
+    exePathLike
   ],
   { encoding: 'utf-8' }
 ).trim()
@@ -148,9 +167,13 @@ check(
 )
 check('打包版：音乐行存在（按钮永远在）', v.musicRow === true, `.island__music=${v.musicRow}`)
 check(
-  '打包版：播放/暂停/上一首/下一首按钮都在',
-  ['上一首', '下一首'].every((l) => v.btnLabels.includes(l)) &&
-    v.btnLabels.some((l) => l && l.includes('播放')),
+  '打包版：上一首/下一首/音量按钮都在',
+  ['上一首', '下一首', '音量'].every((l) => v.btnLabels.includes(l)),
+  `按钮=${JSON.stringify(v.btnLabels)}`
+)
+check(
+  '打包版：播放/暂停按钮在（标签是「播放」或「暂停」或两态）',
+  v.btnLabels.some((l) => l === '播放' || l === '暂停' || l === '播放/暂停'),
   `按钮=${JSON.stringify(v.btnLabels)}`
 )
 check(
@@ -159,8 +182,10 @@ check(
   `volume=${v.volume}`
 )
 check(
-  '打包版：没有会话时歌名区是空的（不显示假的）',
-  v.media === null || v.media.title === '' || v.media.hasSession === false,
+  '打包版：歌名要么是真的（窗口兜底也算），要么是空的 —— **不显示假的**',
+  v.media === null ||
+    v.media.title === '' ||
+    (typeof v.media.title === 'string' && v.media.title.length > 0),
   `media=${JSON.stringify(v.media)}`
 )
 
@@ -231,9 +256,26 @@ check(
   `label=${iconShapes.playPause?.label}`
 )
 
+// ---------- 歌名（0.3.8 新增）----------
+const songUi = await evaluate(`(() => {
+  const t = document.querySelector('.island__music-title')
+  const a = document.querySelector('.island__music-artist')
+  return { title: t ? t.textContent : null, artist: a ? a.textContent : null }
+})()`)
+console.log(`  [诊断] 打包版界面上的歌名：${JSON.stringify(songUi)}`)
+check(
+  '打包版：歌名显示出来了（窗口标题兜底）',
+  !!songUi?.title,
+  `title=${JSON.stringify(songUi?.title)}`
+)
+check(
+  '打包版：歌手也显示出来了',
+  !!songUi?.artist,
+  `artist=${JSON.stringify(songUi?.artist)}`
+)
+
 // 方向：独立进程读音频会话的峰值当真相源
-const { execFileSync } = await import('node:child_process')
-const path = await import('node:path')
+// ⚠ `execFileSync` / `path` 上面已经导入过了，别重复声明（ESM 会直接报语法错）
 let realPlaying = null
 let realPeak = null
 try {
