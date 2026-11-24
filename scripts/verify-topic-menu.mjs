@@ -20,6 +20,15 @@ import path from 'node:path'
 const root = process.cwd()
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
+/**
+ * --synthetic：用 CDP 派发合成鼠标事件，**不碰真鼠标**。
+ *
+ * 打包版验包时必须用它：机器上还有用户自己那份番茄钟在跑，
+ * 两个岛的窗口位置完全重叠，真鼠标点到那个坐标命中谁说不准。
+ */
+const SYNTHETIC = process.argv.includes('--synthetic')
+console.log(`[模式] ${SYNTHETIC ? '合成鼠标事件（打包版：不碰真鼠标）' : '真鼠标（开发版）'}`)
+
 let pass = 0
 let fail = 0
 function check(name, ok, extra = '') {
@@ -150,7 +159,19 @@ async function islandBounds(island) {
   )
 }
 
-/** 点一个元素（真鼠标）：先算屏幕坐标，再 move/down/up */
+/**
+ * 点一个元素。
+ *
+ * 两种模式：
+ *   - 默认（开发版）：**真鼠标**（SetCursorPos + mouse_event）→ 走的是真的系统输入链路
+ *   - --synthetic（打包版）：用 CDP 派发合成鼠标事件
+ *
+ * ⚠ 为什么打包版要用合成事件：机器上还有**用户自己那份**番茄钟在跑，
+ *   两个岛的窗口位置完全重叠（都贴屏幕顶端居中）——
+ *   真鼠标点到那个坐标，命中的是**谁的岛说不准**，
+ *   万一点到用户那份上，就等于替用户切了计时器。
+ *   合成事件只发给被测实例自己的页面，不碰用户那份。
+ */
 async function clickElement(island, selector, index = 0) {
   const info = await evaluate(
     island,
@@ -164,18 +185,64 @@ async function clickElement(island, selector, index = 0) {
       return {
         found: true,
         text: (el.textContent || '').trim(),
-        screenPoint: { x: Math.round(win.x + r.x + r.width / 2), y: Math.round(win.y + r.y + r.height / 2) }
+        clientPoint: { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) },
+        win
       }
     })()`
   )
-  if (!info.found || !info.screenPoint) return { ok: false, info }
-  await mouse(`move ${info.screenPoint.x} ${info.screenPoint.y}`)
-  await sleep(250)
-  await mouse(`down ${info.screenPoint.x} ${info.screenPoint.y}`)
-  await sleep(120)
-  await mouse('up')
+  if (!info.found || !info.clientPoint) return { ok: false, info }
+  const p = info.clientPoint
+  if (SYNTHETIC) {
+    await send(island, 'Input.dispatchMouseEvent', {
+      type: 'mouseMoved',
+      x: p.x,
+      y: p.y,
+      button: 'none',
+      clickCount: 0
+    })
+    await sleep(200)
+    await send(island, 'Input.dispatchMouseEvent', {
+      type: 'mousePressed',
+      x: p.x,
+      y: p.y,
+      button: 'left',
+      clickCount: 1
+    })
+    await sleep(120)
+    await send(island, 'Input.dispatchMouseEvent', {
+      type: 'mouseReleased',
+      x: p.x,
+      y: p.y,
+      button: 'left',
+      clickCount: 1
+    })
+  } else {
+    const sp = { x: Math.round(info.win.x + p.x), y: Math.round(info.win.y + p.y) }
+    await mouse(`move ${sp.x} ${sp.y}`)
+    await sleep(250)
+    await mouse(`down ${sp.x} ${sp.y}`)
+    await sleep(120)
+    await mouse('up')
+  }
   await sleep(350)
   return { ok: true, info }
+}
+
+/** 把鼠标放到某个客户端坐标上（不点击） */
+async function moveToClient(island, win, cx, cy) {
+  if (SYNTHETIC) {
+    await send(island, 'Input.dispatchMouseEvent', {
+      type: 'mouseMoved',
+      x: cx,
+      y: cy,
+      button: 'none',
+      clickCount: 0
+    })
+  } else {
+    const sp = { x: Math.round(win.x + cx), y: Math.round(win.y + cy) }
+    await mouse(`move ${sp.x} ${sp.y}`)
+  }
+  await sleep(250)
 }
 
 async function shot(island, file) {
@@ -297,18 +364,30 @@ console.log(`  （被测实例里有 ${topics.length} 个主题：${topics.map((
 check('被测实例至少 3 个主题（要验"列表项 ≥3 全部看得见"）', topics.length >= 3)
 
 console.log('\n=== 1. 展开岛 ===')
-let expanded = false
-for (let i = 0; i < 6; i++) {
-  await mouse('move 5 5')
-  await sleep(400)
-  const b = await islandBounds(island)
-  await mouse(`move ${Math.round(b.x + b.width / 2)} ${Math.round(b.y + 12)}`)
-  await sleep(700)
-  if (await evaluate(island, `!!document.querySelector('.island--expanded')`)) {
-    expanded = true
-    break
+/** 展开岛：把鼠标（真鼠标或合成）放到岛的时间上，等它自己展开 */
+async function expandIsland() {
+  for (let i = 0; i < 6; i++) {
+    const b0 = await islandBounds(island)
+    await moveToClient(island, b0, 2, 2) // 先移开
+    await sleep(450)
+    const b = await islandBounds(island)
+    const target = await evaluate(
+      island,
+      `(() => {
+        const el = document.querySelector('.island__time') || document.querySelector('.island__clock')
+        if (!el) return null
+        const r = el.getBoundingClientRect()
+        return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }
+      })()`
+    )
+    if (!target) continue
+    await moveToClient(island, b, target.x, target.y)
+    await sleep(700)
+    if (await evaluate(island, `!!document.querySelector('.island--expanded')`)) return true
   }
+  return false
 }
+const expanded = await expandIsland()
 check('岛能展开', expanded)
 
 console.log('\n=== 2. 点主题胶囊 → 往下出列表 ===')
@@ -381,8 +460,22 @@ await sleep(700)
 // 选中后列表收起来了，鼠标留在列表那一行 → 已经在胶囊外面，
 // 岛会在 400ms 后自己收起（这是对的）。要看胶囊文字，
 // 先把鼠标挪回胶囊上再读。
-await mouse(`move ${Math.round(after.x + after.width / 2)} ${Math.round(after.y + 12)}`)
-await sleep(700)
+{
+  const bNow = await islandBounds(island)
+  const clock = await evaluate(
+    island,
+    `(() => {
+      // 岛可能已经收起了（鼠标还在列表那一行）——
+      // 收起态是 .island__time，展开态是 .island__clock，两个都试一下。
+      const el = document.querySelector('.island__clock') || document.querySelector('.island__time')
+      if (!el) return null
+      const r = el.getBoundingClientRect()
+      return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }
+    })()`
+  )
+  if (clock) await moveToClient(island, bNow, clock.x, clock.y)
+  await sleep(700)
+}
 const capText = await evaluate(
   island,
   `(() => {
@@ -421,8 +514,22 @@ check('当前选中的那个打了勾', !!stillOn.checked, `打勾的是「${sti
 const click2 = await clickElement(island, '.island__menu-item--on', 0)
 check('再点一次点得到（列表还开着）', click2.ok, click2.ok ? click2.info.text : JSON.stringify(click2.info))
 await sleep(700)
-await mouse(`move ${Math.round(after.x + after.width / 2)} ${Math.round(after.y + 12)}`)
-await sleep(700)
+{
+  const bNow = await islandBounds(island)
+  const clock = await evaluate(
+    island,
+    `(() => {
+      // 岛可能已经收起了（鼠标还在列表那一行）——
+      // 收起态是 .island__time，展开态是 .island__clock，两个都试一下。
+      const el = document.querySelector('.island__clock') || document.querySelector('.island__time')
+      if (!el) return null
+      const r = el.getBoundingClientRect()
+      return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }
+    })()`
+  )
+  if (clock) await moveToClient(island, bNow, clock.x, clock.y)
+  await sleep(700)
+}
 const capText2 = await evaluate(
   island,
   `(() => {
