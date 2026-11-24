@@ -15,7 +15,14 @@ export const ISLAND = {
   /** 窗口左右各留的透明余量（给阴影） */
   sidePad: 8,
   /** 窗口底部留的透明余量（给阴影） */
-  bottomPad: 14
+  bottomPad: 14,
+  /**
+   * 主题列表（v0.3.10）跟胶囊之间的缝。
+   *
+   * 岛贴屏幕顶端，列表只能**向下**展开，所以窗口要临时加高。
+   * 这个数同时被两边用：主进程拿它算窗口高度，渲染层拿它定位列表。
+   */
+  menuGap: 6
 } as const
 
 export type IslandMode = 'collapsed' | 'expanded'

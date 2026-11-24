@@ -11,10 +11,11 @@
 //     第二层：点某个胶囊，下面那一行换成它的候选项（一次只展开一行）
 //   Esc 逐层收回：先收回第二层，再收起整个岛
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { MediaSnapshot, Settings, TimerState } from '../../shared/types'
 import { resolveUiTheme } from '../../shared/types'
 import {
+  CheckIcon,
   NextIcon,
   OpenIcon,
   PauseIcon,
@@ -26,6 +27,13 @@ import {
 } from './Icons'
 import VolumeSlider from './VolumeSlider'
 import { mediaCommandFor, playPauseIconFor, playingDirection } from '../../shared/media-direction'
+import { ISLAND } from '../../shared/island'
+import {
+  addTopicAction,
+  nextActiveTopicId,
+  showUnattachedNote,
+  topicMenuItems
+} from '../../shared/topic-picker'
 
 /** 悬停多久展开 */
 const HOVER_OPEN_MS = 120
@@ -34,8 +42,8 @@ const HOVER_CLOSE_MS = 400
 /** 音量滑条：多久不动自动收起 */
 const VOL_HIDE_MS = 3000
 
-/** 展开态第二层显示什么 */
-type Layer = 'idle' | 'presets' | 'topics'
+/** 展开态第二层显示什么（主题不走这一层了，它往下展开成列表） */
+type Layer = 'idle' | 'presets'
 
 /** 秒 → mm:ss */
 function formatTime(sec: number): string {
@@ -50,12 +58,21 @@ export default function Island(): React.JSX.Element {
   const [settings, setSettings] = useState<Settings | null>(null)
   const [expanded, setExpanded] = useState(false)
   const [layer, setLayer] = useState<Layer>('idle')
+  /**
+   * 主题列表开着没有（v0.3.10）。
+   *
+   * 岛贴屏幕顶端，列表只能**向下**展开 —— 它画在胶囊外面，
+   * 所以窗口要临时加高（见下面 setMenuHeight 那个 effect）。
+   */
+  const [topicMenu, setTopicMenu] = useState(false)
   const [hint, setHint] = useState('')
   const [editingTask, setEditingTask] = useState(false)
   const [taskDraft, setTaskDraft] = useState('')
   const [media, setMedia] = useState<MediaSnapshot | null>(null)
   const openTimer = useRef<number | null>(null)
   const closeTimer = useRef<number | null>(null)
+  /** 主题列表的 DOM（量它有多高，好让主进程把窗口加高） */
+  const menuRef = useRef<HTMLDivElement>(null)
 
   // ---- 系统音量滑条 ----
   // 滑条在**音乐行里**：点喇叭图标把歌名区换成滑条（行高不变）。
@@ -115,7 +132,11 @@ export default function Island(): React.JSX.Element {
   /** 收起 / 展开：本地状态决定画什么，主进程据此改窗口大小 */
   const setMode = useCallback((next: boolean) => {
     setExpanded(next)
-    if (!next) setLayer('idle')
+    if (!next) {
+      setLayer('idle')
+      // 收起时主题列表也收起来（窗口要缩回胶囊那么高）
+      setTopicMenu(false)
+    }
   }, [])
 
   /**
@@ -148,6 +169,14 @@ export default function Island(): React.JSX.Element {
   // 悬停展开 / 离开收起
   const onEnter = useCallback(() => {
     if (openTimer.current) window.clearTimeout(openTimer.current)
+    // ⚠ 进来的同时要把"待收起"的定时器也取消：
+    //   主题列表画在胶囊下面，鼠标从胶囊移到列表上时，
+    //   中间那几像素的空隙会让鼠标短暂落在"谁都不是"的地方，
+    //   触发 leave → 400ms 后岛塌掉，列表跟着消失。
+    if (closeTimer.current) {
+      window.clearTimeout(closeTimer.current)
+      closeTimer.current = null
+    }
     openTimer.current = window.setTimeout(() => setMode(true), HOVER_OPEN_MS)
   }, [setMode])
 
@@ -163,12 +192,16 @@ export default function Island(): React.JSX.Element {
     closeTimer.current = window.setTimeout(() => setMode(false), HOVER_CLOSE_MS)
   }, [setMode, editingTask])
 
-  // Esc：编辑中先取消编辑；否则先收回第二层，再收起整个岛
+  // Esc：编辑中先取消编辑；主题列表开着先收列表；再收回第二层；最后收起整个岛
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== 'Escape') return
       if (editingTask) {
         setEditingTask(false)
+        return
+      }
+      if (topicMenu) {
+        setTopicMenu(false)
         return
       }
       if (layer !== 'idle') {
@@ -179,7 +212,7 @@ export default function Island(): React.JSX.Element {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [layer, setMode, editingTask])
+  }, [layer, setMode, editingTask, topicMenu])
 
   useEffect(
     () => () => {
@@ -203,10 +236,15 @@ export default function Island(): React.JSX.Element {
     }
   }
 
-  /** 切主题：同一条规则，只影响下一段 */
-  const pickTopic = (id: string | null): void => {
-    window.island?.settings.save({ activeTopicId: id })
-    setLayer('idle')
+  /**
+   * 切主题：同一条规则，只影响下一段。
+   *
+   * 再点已选中的那个 = 取消（回「＋ 主题」）——
+   * 规则在 shared/topic-picker.ts 里，主窗口用的是同一份。
+   */
+  const pickTopic = (id: string): void => {
+    window.island?.settings.save({ activeTopicId: nextActiveTopicId(selectedTopicId, id) })
+    setTopicMenu(false)
     if (state?.running) {
       setHint('下一段生效')
       window.setTimeout(() => setHint(''), 2000)
@@ -300,48 +338,87 @@ export default function Island(): React.JSX.Element {
   const runningTopicId = state?.topicId ?? null
   const activeTopic = (settings?.topics ?? []).find((t) => t.id === selectedTopicId)
 
+  /** 主题列表的内容：全部可选主题 + 末尾一行新建入口 */
+  const menuItems = topicMenuItems(settings?.topics ?? [], selectedTopicId, runningTopicId)
+
+  /**
+   * 列表有多高 → 告诉主进程把窗口加高那么多（v0.3.10）。
+   *
+   * 岛贴屏幕顶端，列表只能**向下**展开：窗口不变高，列表会被裁掉。
+   * 高度是**量出来的 DOM 高度**，不是猜的常数（几个主题就是几行）。
+   *
+   * ⚠ 这个 effect 必须留在提前 return 之前 —— React 要求每次渲染的 hook 顺序一致。
+   */
+  useLayoutEffect(() => {
+    const el = menuRef.current
+    const h = el ? Math.ceil(el.getBoundingClientRect().height) : 0
+    window.island?.island.setMenuHeight(h)
+  }, [topicMenu, menuItems.length, selectedTopicId, runningTopicId])
+
+  /** 舞台的样式变量：胶囊高度（有没有音乐行）+ 列表跟胶囊的缝 */
+  const stageStyle = {
+    // 高度跟着"有没有音乐行"走，主进程那边的窗口高度用的是同一个数
+    '--island-h-expanded': showMusic ? 'var(--island-h-expanded-music)' : undefined,
+    // 缝的距离以 shared/island.ts 为准（主进程也算窗口高度，得是同一个数）
+    '--island-menu-gap': `${ISLAND.menuGap}px`
+  } as React.CSSProperties
+
   if (!expanded) {
     return (
       <div
-        className="island"
+        className="island-stage"
+        style={stageStyle}
+        // 悬停展开挂在**舞台**上（不是胶囊上）——
+        // 主题列表画在胶囊下面，鼠标移到列表上时不能算"离开了岛"。
         onMouseEnter={onEnter}
         onMouseLeave={onLeave}
-        onClick={toggle}
       >
-        <span className="island__dot" />
-        <span className="island__time">{formatTime(remaining)}</span>
+        <div className="island" onClick={toggle}>
+          <span className="island__dot" />
+          <span className="island__time">{formatTime(remaining)}</span>
+        </div>
       </div>
     )
   }
 
   return (
     <div
-      className="island island--expanded"
-      style={
-        {
-          // 高度跟着"有没有音乐行"走，主进程那边的窗口高度用的是同一个数
-          '--island-h-expanded': showMusic ? 'var(--island-h-expanded-music)' : undefined
-        } as React.CSSProperties
-      }
+      className="island-stage"
+      style={stageStyle}
+      // 悬停展开 / 离开收起：**挂在舞台上**（不是胶囊上）——
+      // 主题列表画在胶囊下面，鼠标移到列表上时不能算"离开了岛"。
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
       onClick={() => {
-        // 展开态点空白：收回第二层。第一层点空白还是"开始/暂停"（整条岛是大号开关）
-        // 正在写任务名时点空白 = 结束编辑并提交，别顺手把计时也切了
-        if (editingTask) {
-          commitTask()
-          return
-        }
-        // 音量滑条开着的时候，点岛的其他地方 = **收起滑条**，
-        // 不能顺手把计时也切了（那是"点到岛外自动收起"那条规格）
-        if (volOpen) {
-          setVolOpen(false)
-          return
-        }
-        if (layer !== 'idle') setLayer('idle')
-        else toggle()
+        // 点窗口里的空白处 = 收起主题列表
+        if (topicMenu) setTopicMenu(false)
       }}
     >
+      <div
+        className="island island--expanded"
+        onClick={() => {
+          // 展开态点空白：收回第二层。第一层点空白还是"开始/暂停"（整条岛是大号开关）
+          // 正在写任务名时点空白 = 结束编辑并提交，别顺手把计时也切了
+          if (editingTask) {
+            commitTask()
+            return
+          }
+          // 主题列表开着的时候，点岛的其他地方 = **收起列表**，
+          // 不能顺手把计时也切了
+          if (topicMenu) {
+            setTopicMenu(false)
+            return
+          }
+          // 音量滑条开着的时候，点岛的其他地方 = **收起滑条**，
+          // 不能顺手把计时也切了（那是"点到岛外自动收起"那条规格）
+          if (volOpen) {
+            setVolOpen(false)
+            return
+          }
+          if (layer !== 'idle') setLayer('idle')
+          else toggle()
+        }}
+      >
       <div className="island__row">
         <button
           className="island__clock"
@@ -434,45 +511,6 @@ export default function Island(): React.JSX.Element {
               </button>
             ))}
         </span>
-      ) : layer === 'topics' ? (
-        <span className="island__opts">
-          {[...(settings?.topics ?? [])]
-            .filter((t) => !t.archived)
-            .sort((a, b) => a.order - b.order)
-            .map((t) => (
-              <button
-                key={t.id}
-                className={t.id === selectedTopicId ? 'island__opt island__opt--on' : 'island__opt'}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  // 再点一次已选中的那个 = 取消选择（不然没有别的办法取消）
-                  pickTopic(t.id === selectedTopicId ? null : t.id)
-                }}
-              >
-                <i style={{ background: t.color }} />
-                {t.name}
-                {/* 正在跑的这段挂的是这个主题，但用户已经选了别的 → 标一下，别让人以为没生效 */}
-                {runningTopicId === t.id && runningTopicId !== selectedTopicId ? (
-                  <em className="island__opt-tag">本段</em>
-                ) : null}
-              </button>
-            ))}
-          {/* 没有"未分类"这个选项了 —— 它是数据概念（记录里没挂主题），不是能选的东西。
-              想要一个"还没选"的状态，这里给一条创建入口。 */}
-          <button
-            className="island__opt island__opt--add"
-            onClick={(e) => {
-              e.stopPropagation()
-              window.island?.island.openTopics()
-            }}
-          >
-            ＋ 主题
-          </button>
-          {/* 这一段没挂主题但用户选了别的：说明一下，别让人以为这段也会记到那个主题上 */}
-          {runningTopicId === null && selectedTopicId !== null ? (
-            <em className="island__opt-note">本段没挂主题</em>
-          ) : null}
-        </span>
       ) : (
         <span className="island__vals">
           <button
@@ -488,14 +526,19 @@ export default function Island(): React.JSX.Element {
             className={activeTopic ? 'island__val' : 'island__val island__val--add'}
             onClick={(e) => {
               e.stopPropagation()
-              // 没选主题时，这个位置是**提示可以创建主题**，
-              // 不是"未分类"这个伪选项 ——
-              // "未分类"是数据概念（记录里没挂主题），不是能选的东西。
-              if (!activeTopic) {
+              // 主题胶囊：**先出列表**（v0.3.10）。
+              // 以前这里是"没选就去新建、选了才出列表" ——
+              // 于是有主题的时候反而选不中，用户报的就是这个。
+              // 一个主题都没有时没有列表可显示，直接进新建。
+              if (topicMenu) {
+                setTopicMenu(false)
+                return
+              }
+              if (addTopicAction(settings?.topics ?? []) === 'open-create') {
                 window.island?.island.openTopics()
                 return
               }
-              setLayer('topics')
+              setTopicMenu(true)
             }}
           >
             {activeTopic ? (
@@ -605,6 +648,64 @@ export default function Island(): React.JSX.Element {
       <span className="island__bar" style={{ opacity: percent > 0 ? 1 : 0.5 }}>
         <i style={{ width: `${percent}%` }} />
       </span>
+      </div>
+
+      {/*
+       * 主题列表（v0.3.10）：画在**胶囊下面**，往下展开。
+       *
+       * 为什么不塞进胶囊里（以前的做法是把主题做成胶囊内的一行小药丸）：
+       *   主题一多就装不下（用户有 3 个以上主题时就看不全），
+       *   而且胶囊是横向的，列表只能一行一行挤。
+       * 现在它是独立的一块玻璃板，贴着屏幕顶端往下垂 ——
+       * 胶囊的圆角和阴影一点没动。
+       */}
+      {topicMenu ? (
+        <div
+          className="island__menu"
+          ref={menuRef}
+          onClick={(e) => e.stopPropagation()}
+          onMouseEnter={onEnter}
+          onMouseLeave={onLeave}
+        >
+          {menuItems.map((it) =>
+            it.kind === 'topic' ? (
+              <button
+                key={it.id}
+                className={
+                  it.selected ? 'island__menu-item island__menu-item--on' : 'island__menu-item'
+                }
+                onClick={(e) => {
+                  e.stopPropagation()
+                  pickTopic(it.id)
+                }}
+              >
+                <i style={{ background: it.color }} />
+                <span className="island__menu-name">{it.name}</span>
+                {/* 正在跑的这段挂的是这个主题，但用户选了别的 → 标一下，别让人以为没生效 */}
+                {it.running && !it.selected ? <em className="island__menu-tag">本段</em> : null}
+                {/* 当前选中的打个勾 */}
+                {it.selected ? <CheckIcon size={13} className="island__menu-check" /> : null}
+              </button>
+            ) : (
+              <button
+                className="island__menu-item island__menu-item--add"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  // 末尾这一行才是"新建"：去主窗口设置页建一个
+                  setTopicMenu(false)
+                  window.island?.island.openTopics()
+                }}
+              >
+                ＋ 新建主题
+              </button>
+            )
+          )}
+          {/* 这一段没挂主题但用户选了别的：说明一下，别让人以为这段也会记到那个主题上 */}
+          {showUnattachedNote(selectedTopicId, runningTopicId) ? (
+            <em className="island__menu-note">本段没挂主题</em>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   )
 }

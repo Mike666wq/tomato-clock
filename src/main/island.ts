@@ -35,6 +35,13 @@ export type IslandController = {
   isVisible(): boolean
   setMode(mode: IslandMode, music?: boolean): void
   getMode(): IslandMode
+  /**
+   * 主题列表展开时的高度（像素，0 = 收着）。
+   *
+   * 岛贴屏幕顶端，列表只能向下展开 → 窗口必须临时加高。
+   * 高度由渲染层量出来传过来（列表几行它最清楚）。
+   */
+  setMenuHeight(px: number): void
   /** 开发期：横向挪开（避开用户自己那份的岛）。0 = 回到正中。 */
   setDevOffsetX(dx: number): void
   destroy(): void
@@ -50,10 +57,15 @@ function windowWidth(mode: IslandMode): number {
  *
  * music 为真表示展开态下面还要多一行音乐控制（v0.2.2），
  * 那一行出现/消失时窗口高度要跟着变，否则胶囊会被截掉或者多出一块空白。
+ *
+ * menuH 为真表示主题列表往下展开了（v0.3.10）：
+ * 窗口要临时加高（胶囊高度 + 缝 + 列表高度），
+ * 列表画在胶囊**下面**，所以胶囊的圆角和阴影不会被撑歪。
  */
-function windowHeight(mode: IslandMode, music: boolean): number {
+function windowHeight(mode: IslandMode, music: boolean, menuH: number): number {
   const h = mode === 'expanded' ? (music ? ISLAND.expandedHMusic : ISLAND.expandedH) : ISLAND.collapsedH
-  return h + ISLAND.bottomPad
+  const menu = mode === 'expanded' && menuH > 0 ? ISLAND.menuGap + menuH : 0
+  return h + menu + ISLAND.bottomPad
 }
 
 /**
@@ -79,13 +91,14 @@ function placeTopCenter(win: BrowserWindow, offsetX = 0): void {
 export function createIsland(actions: IslandActions): IslandController {
   let mode: IslandMode = 'collapsed'
   let music = false
+  let menuH = 0
   let animTimer: NodeJS.Timeout | null = null
   /** 开发期的横向偏移（DIP）；打包版里永远是 0 */
   let devOffsetX = 0
 
   const win = new BrowserWindow({
     width: windowWidth(mode),
-    height: windowHeight(mode, music),
+    height: windowHeight(mode, music, menuH),
     frame: false,
     transparent: true,
     // 不能写 resizable:false：Windows 上那样连程序化 setSize 都会被吞掉，
@@ -161,8 +174,29 @@ export function createIsland(actions: IslandActions): IslandController {
   const setMode = (next: IslandMode, withMusic?: boolean): void => {
     mode = next
     if (typeof withMusic === 'boolean') music = withMusic
-    animateSize(windowWidth(mode), windowHeight(mode, music))
+    if (next !== 'expanded') menuH = 0
+    animateSize(windowWidth(mode), windowHeight(mode, music, menuH))
     log.info(`灵动岛切换到 ${next}${music ? '（带音乐行）' : ''}`)
+  }
+
+  /**
+   * 主题列表展开/收起 → 窗口临时加高/收回。
+   *
+   * ⚠ 这里**不走动画**：列表是"点一下就出来"的东西，
+   *   220ms 的高度动画会让列表在半路被窗口裁掉（body overflow:hidden），
+   *   看着像闪了一下。直接改尺寸最稳。
+   */
+  const setMenuHeight = (px: number): void => {
+    const next = Math.max(0, Math.round(Number(px) || 0))
+    if (next === menuH) return
+    menuH = next
+    if (animTimer) {
+      clearInterval(animTimer)
+      animTimer = null
+    }
+    win.setSize(windowWidth(mode), windowHeight(mode, music, menuH))
+    placeTopCenter(win, devOffsetX)
+    log.info(`灵动岛主题列表高度 ${menuH}px`)
   }
 
   /**
@@ -204,6 +238,7 @@ export function createIsland(actions: IslandActions): IslandController {
     isVisible: () => win.isVisible(),
     setMode,
     getMode: () => mode,
+    setMenuHeight,
     setDevOffsetX: (dx: number) => {
       devOffsetX = Number.isFinite(dx) ? Math.round(dx) : 0
       placeTopCenter(win, devOffsetX)

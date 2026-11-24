@@ -17,6 +17,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { Topic } from '../../shared/topics'
+import { nextActiveTopicId, pickableTopics } from '../../shared/topic-picker'
 
 type Props = {
   topics: Topic[]
@@ -39,7 +40,8 @@ export function TopicBar({
   compact,
   onAdd
 }: Props): React.JSX.Element {
-  const live = [...topics].filter((t) => !t.archived).sort((a, b) => a.order - b.order)
+  // 可选的主题跟岛上用同一份规则（shared/topic-picker.ts）
+  const live = pickableTopics(topics)
   const scrollRef = useRef<HTMLDivElement>(null)
   const [overflow, setOverflow] = useState(false)
 
@@ -63,7 +65,8 @@ export function TopicBar({
         <button
           key={t.id}
           className={t.id === activeId ? 'topics__chip topics__chip--on' : 'topics__chip'}
-          onClick={() => onPick(t.id === activeId ? null : t.id)}
+          // 再点已选中的那个 = 取消（跟岛上同一套规则）
+          onClick={() => onPick(nextActiveTopicId(activeId, t.id))}
         >
           <span className="topics__dot" style={{ background: t.color }} />
           {t.name}

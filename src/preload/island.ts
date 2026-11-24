@@ -36,8 +36,15 @@ const api = {
     openMain: (): void => ipcRenderer.send('island:open-main'),
     /** 主动要键盘焦点（就地编辑任务名之前必须调，否则输入跑到主窗口去了） */
     focus: (): void => ipcRenderer.send('island:focus'),
-    /** 打开主窗口的主题分区（灵动岛的「＋ 主题」就是它） */
-    openTopics: (): void => ipcRenderer.send('island:open-topics')
+    /** 打开主窗口的主题分区（灵动岛列表末尾的「＋ 新建主题」就是它） */
+    openTopics: (): void => ipcRenderer.send('island:open-topics'),
+    /**
+     * 主题列表展开时的高度（像素，0 = 收着）。
+     *
+     * 岛贴屏幕顶端，列表只能向下展开 → 窗口必须临时加高，
+     * 列表画在胶囊下面，胶囊的圆角和阴影不受影响。
+     */
+    setMenuHeight: (px: number): void => ipcRenderer.send('island:set-menu-height', px)
   },  media: {
     /** 当前在放什么；null = 没有音乐在放 */
     getState: (): Promise<MediaSnapshot | null> => ipcRenderer.invoke('media:get-state'),

@@ -703,12 +703,17 @@ if (!app.requestSingleInstanceLock()) {
       island?.setMode(mode, withMusic)
     )
     ipcMain.on('island:open-main', () => showWindow())
-    // 灵动岛的「＋ 主题」：把人送到主窗口的设置页主题那块去建一个
+    // 灵动岛的「＋ 新建主题」：把人送到主窗口的设置页主题那块去建一个
     ipcMain.on('island:open-topics', () => {
       showWindow()
       mainWindow?.webContents.send('nav:page', 'settings')
       mainWindow?.webContents.send('nav:section', 'topics')
     })
+    // 主题列表往下展开 → 窗口临时加高（v0.3.10）。
+    // 高度由渲染层量出来传过来（列表几行它最清楚）。
+    ipcMain.on('island:set-menu-height', (_e, px: number) =>
+      island?.setMenuHeight(typeof px === 'number' ? px : 0)
+    )
     // 就地编辑任务名之前，让浮层真的拿到键盘焦点（否则字符打到主窗口里）
     ipcMain.on('island:focus', () => {
       const win = island?.win

@@ -1,15 +1,30 @@
-# 开发期工具：抓桌面最终合成结果（GDI），并按给定区域裁剪。
+# Dev tool: capture the composited desktop (GDI) and crop to a region.
 #
-# 为什么不用 CDP 截图拍桌面：CDP 拍的是窗口自己的像素，没有桌面环境。
-# 「纸感是浅底，放在深色桌面上会不会太跳」这个问题必须看桌面实况。
+# WHY THIS FILE IS ASCII ONLY:
+#   Windows PowerShell 5.1 reads a .ps1 file as ANSI when there is no BOM,
+#   so a Chinese literal gets mangled and can break the parser
+#   (a mangled byte can terminate a here-string early).
+#   Same rule as scripts/real-mouse.ps1.
 #
-# 用法：
+# WHY SetProcessDPIAware():
+#   Without it this process is DPI-unaware, so:
+#     1) Screen.PrimaryScreen.Bounds reports the VIRTUALIZED size
+#        (1707x1066 here, not the physical 2560x1600)
+#     2) CopyFromScreen then copies only the top-left physical region
+#        (1707x1066 physical pixels) - the right/bottom of the screen
+#        never reaches the picture, and the island sits exactly there
+#     3) the picture and the -X/-Y/-W/-H crop values end up in two
+#        different coordinate spaces (very hard to debug)
+#   After the call: the bitmap is the whole PHYSICAL screen and the
+#   crop coordinates are physical pixels too.
+#
+# Usage:
 #   powershell -File scripts/desktop-shot.ps1 -Out docs\shots\x.png -X 140 -Y 80 -W 482 -H 585
 #
-# 参数：
-#   -Out  输出文件
-#   -X -Y -W -H  裁剪区域（不填就抓整屏）
-#   -Pad  裁剪时四周留多少边（看得见桌面环境）
+# Parameters:
+#   -Out  output file
+#   -X -Y -W -H  crop area in PHYSICAL pixels (omit for the whole screen)
+#   -Pad  padding around the crop (keeps some desktop context visible)
 param(
   [Parameter(Mandatory = $true)][string]$Out,
   [int]$X = -1,
@@ -21,6 +36,16 @@ param(
 
 Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName System.Windows.Forms
+
+$src = @'
+using System;
+using System.Runtime.InteropServices;
+public class DpiAware {
+  [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+}
+'@
+Add-Type -TypeDefinition $src
+[void][DpiAware]::SetProcessDPIAware()
 
 $screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
 $bmp = New-Object System.Drawing.Bitmap $screen.Width, $screen.Height
@@ -43,4 +68,4 @@ $dir = Split-Path -Parent $Out
 if ($dir -and -not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
 $bmp.Save($Out, [System.Drawing.Imaging.ImageFormat]::Png)
 $bmp.Dispose()
-Write-Output "[desktop-shot] saved $Out"
+Write-Output "[desktop-shot] saved $Out ($($bmp.Width)x$($bmp.Height))"

@@ -65,4 +65,12 @@
      同名会被主题文件覆盖掉 —— 轨道高度和拇指尺寸实测都变成了 0。 */
   --island-vol-track-h: 4px;
   --island-vol-thumb-size: 12px;
+
+  /* ---------- 主题列表（v0.3.10） ----------
+     岛贴屏幕顶端，主题列表只能往下展开 → 窗口临时加高。
+     这些是尺寸（与主题无关）；颜色跟胶囊共用 --island-bg / --island-edge / --island-shadow。 */
+  --island-menu-gap: 6px; /* ⚠ 权威值在 shared/island.ts 的 ISLAND.menuGap（渲染层会写进来） */
+  --island-menu-pad: 4px;
+  --island-menu-row-h: 28px;
+  --island-menu-item-pad: 8px;
 }

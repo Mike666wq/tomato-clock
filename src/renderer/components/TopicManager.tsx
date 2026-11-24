@@ -12,6 +12,7 @@ import {
   type Topic,
   type TopicDraft
 } from '../../shared/topics'
+import { nextActiveTopicId, pickableTopics } from '../../shared/topic-picker'
 
 type Props = {
   topics: Topic[]
@@ -33,7 +34,7 @@ export function TopicManager({ topics, activeId, onTopics, onActivate, onNotice 
   const [error, setError] = useState('')
   const [showArchived, setShowArchived] = useState(false)
 
-  const live = [...topics].filter((t) => !t.archived).sort((a, b) => a.order - b.order)
+  const live = pickableTopics(topics)
   const archived = [...topics].filter((t) => t.archived).sort((a, b) => a.order - b.order)
 
   const open = (mode: 'new' | 'rename', topic?: Topic): void => {
@@ -86,18 +87,19 @@ export function TopicManager({ topics, activeId, onTopics, onActivate, onNotice 
       </p>
 
       <div className="topic-list">
-        <button
-          className={activeId === null ? 'topic-row topic-row--on' : 'topic-row'}
-          onClick={() => onActivate(null)}
-        >
-          <span className="topic-row__dot" style={{ background: 'var(--ink-2)' }} />
-          <span className="topic-row__name">未分类</span>
-          {activeId === null ? <em>当前</em> : null}
-        </button>
-
+        {/*
+         * 这里**没有"未分类"这一行**（v0.3.10）。
+         *
+         * "未分类"是数据概念（记录里没挂主题），不是能选的东西 ——
+         * 摆出来会让人以为它是个主题。取消选择的办法是
+         * **再点一次已选中的那个**（跟岛上、主窗口主题行同一套规则）。
+         */}
         {live.map((t) => (
           <div key={t.id} className={t.id === activeId ? 'topic-row topic-row--on' : 'topic-row'}>
-            <button className="topic-row__name" onClick={() => onActivate(t.id)}>
+            <button
+              className="topic-row__name"
+              onClick={() => onActivate(nextActiveTopicId(activeId, t.id))}
+            >
               <span className="topic-row__dot" style={{ background: t.color }} />
               {t.name}
               {t.id === activeId ? <em>当前</em> : null}

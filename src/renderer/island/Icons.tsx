@@ -132,6 +132,21 @@ export function NextIcon({ className, size = 14 }: IconProps): React.JSX.Element
 
 
 /**
+ * 对勾：主题列表里"当前选中的那个"。
+ *
+ * ⚠ 注意别把它换成独立组件里的 `<svg>` 换节点那套写法（见 PlayPauseGlyph）：
+ *   这个图标在列表里，列表项被点掉时整行会重渲染 —— 图标节点被换掉，
+ *   如果光标正压在它上面，浏览器会报 mouseout，岛就自己收了。
+ */
+export function CheckIcon({ className, size = 14 }: IconProps): React.JSX.Element {
+  return (
+    <svg {...base(size)} className={className} aria-hidden>
+      <path d="M2.8 7.3 5.7 10.1 11.2 4.2" />
+    </svg>
+  )
+}
+
+/**
  * 音量喇叭（系统总音量）。
  * muted=true 时画一条斜杠，表示当前是 0。
  */

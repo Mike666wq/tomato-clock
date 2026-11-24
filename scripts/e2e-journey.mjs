@@ -286,6 +286,20 @@ if (stage === 'restore') {
 
 // ================= journey =================
 
+/**
+ * 归位到"计时"页。
+ *
+ * ⚠ 主窗口可能被别人停在别的页（灵动岛的「＋ 新建主题」会把它送到设置页），
+ *   那时 `.status`（今天 N 个）根本不存在 → 好几条断言会莫名其妙地 FAIL。
+ *   这里直接点导航栏的「计时」，跟用户点的一样。
+ */
+await evaluate(main, `(() => {
+  const btn = [...document.querySelectorAll('.nav__item')].find((b) => (b.textContent || '').trim() === '计时')
+  if (btn) btn.click()
+  return !!btn
+})()`)
+await sleep(600)
+
 // ---- 归位：把计时器拨回"未开始的专注段"，保证下面的断言从已知状态出发 ----
 for (let i = 0; i < 6; i++) {
   const st = await evaluate(main, 'window.pomodoro.timer.getState()')

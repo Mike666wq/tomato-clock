@@ -20,11 +20,140 @@ body {
   /* 透明窗口：body 不能有底色，否则会露出一块方形底 */
   background: transparent;
   overflow: hidden;
+  /* ⚠ 这两行是 v0.3.10 加的，**不能删**：
+     舞台（.island-stage）是 position:relative，它就成了岛的**定位块**。
+     定位块一旦落在 body 的裁剪盒里，body 的 overflow:hidden 就会把
+     超出 body 高度的部分（整个岛）**裁掉** —— 表现是岛画不出来、也点不到
+     （elementFromPoint 只会返回 <html>）。
+     之前岛的定位块是视口（ICBs），逃出了 body 的裁剪，所以没事；
+     加了舞台之后就必须让 body 跟窗口一样高，岛才不会被裁。
+     （2026-11-24 实测踩到：鼠标能扫出展开动画，但点不动。） */
+  height: 100%;
 }
 
 #root {
   width: 100%;
   height: 100%;
+}
+
+/*
+ * 舞台（v0.3.10）。
+ *
+ * 胶囊是**绝对定位**在舞台上的，主题列表也是 —— 但列表画在**胶囊下面**
+ * （岛贴屏幕顶端，列表只能往下展开）。
+ * 悬停展开/收起挂在舞台上而不是胶囊上：
+ * 鼠标从胶囊移到下面的列表里，那一刻**不算"离开了岛"**，
+ * 否则岛会在 400ms 后塌掉，列表跟着消失。
+ */
+.island-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+/* ---- 主题列表（v0.3.10）：往下展开的一块玻璃板 ---- */
+
+.island__menu {
+  position: absolute;
+  /* 贴着胶囊的下沿（胶囊高度随"有没有音乐行"变，所以用同一个变量） */
+  top: calc(var(--island-h-expanded) + var(--island-menu-gap));
+  left: var(--island-side-pad);
+  right: var(--island-side-pad);
+  display: flex;
+  flex-direction: column;
+  padding: var(--island-menu-pad);
+  border-radius: var(--island-radius-expanded);
+  /* 底色/描边/阴影跟胶囊同一套变量 → 自动跟着主题走 */
+  background: var(--island-bg);
+  border: 1px solid var(--island-edge);
+  box-shadow: var(--island-shadow);
+  box-sizing: border-box;
+  color: var(--ink);
+  user-select: none;
+  cursor: default;
+  overflow: hidden;
+}
+
+.island__menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: var(--island-menu-row-h);
+  padding: 0 var(--island-menu-item-pad);
+  box-sizing: border-box;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--ink-2);
+  font-size: var(--fs-tiny);
+  text-align: left;
+  cursor: pointer;
+}
+
+.island__menu-item:hover {
+  color: var(--ink);
+  background: var(--hover);
+}
+
+.island__menu-item--on {
+  color: var(--ink);
+}
+
+/* 主题色点 */
+.island__menu-item > i {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+/* 主题名：太长就省略（别把勾挤出去） */
+.island__menu-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 勾：当前选中的那个 */
+.island__menu-check {
+  flex: none;
+  color: var(--ink);
+}
+
+/* 「本段」标记：正在跑的这段挂的是这个主题 */
+.island__menu-tag {
+  flex: none;
+  margin-left: 4px;
+  font-style: normal;
+  font-size: 9px;
+  line-height: 1;
+  color: var(--ink-3);
+}
+
+/* 说明：这一段没挂主题但用户选了别的 */
+.island__menu-note {
+  flex: none;
+  padding: 4px var(--island-menu-item-pad) 2px;
+  font-style: normal;
+  font-size: 9px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+/* 末尾那一行是"新建"：虚线描边 + 弱一点，跟普通条目区分开 */
+.island__menu-item--add {
+  color: var(--ink-3);
+  border-style: dashed;
+  border: 1px dashed var(--dashed-edge);
+  margin-top: 2px;
+}
+
+.island__menu-item--add:hover {
+  color: var(--ink-2);
+  background: transparent;
 }
 
 .island {
@@ -336,38 +465,19 @@ html[data-paused='1'] .island__clock {
   font-size: var(--fs-tiny);
 }
 
-/* 「本段」标记（灵动岛选项行）：选中的主题和这一段实际挂的主题不一致时才出现 */
-.island__opt-tag {
-  margin-left: 4px;
-  font-style: normal;
-  font-size: 9px;
-  line-height: 1;
-  color: var(--ink-2);
-  opacity: 0.8;
-}
-
-/* 说明：这一段没挂主题但用户选了别的。只说明，不给可点的伪选项 */
-.island__opt-note {
-  font-style: normal;
-  font-size: 9px;
-  color: var(--ink-3);
-  white-space: nowrap;
-}
-
-/* 「＋ 主题」：不是选项，是"这里可以建一个"的入口。
+/* 「＋ 主题」胶囊：不是选项，是"这里可以选一个主题"的入口。
+   没选主题时它就是这个位置唯一的入口（v0.3.10：点它先出列表）。
    虚线描边 + --ink-3，比正常胶囊窄一点 —— 它是提示，不该抢戏。
    虚线的颜色走 --dashed-edge（每套主题自己定），
    纸感下原来的 30% 太淡，几乎看不出框在哪。 */
-.island__val--add,
-.island__opt--add {
+.island__val--add {
   color: var(--ink-3);
   border-style: dashed;
   border-color: var(--dashed-edge);
   padding: 0 8px;
 }
 
-.island__val--add:hover,
-.island__opt--add:hover {
+.island__val--add:hover {
   color: var(--ink-2);
   border-color: var(--ink-2);
   background: transparent;
