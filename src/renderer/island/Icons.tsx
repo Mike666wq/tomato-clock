@@ -55,6 +55,22 @@ export function OpenIcon({ className, size = 14 }: IconProps): React.JSX.Element
   )
 }
 
+/**
+ * 播放/暂停（两态）图标。
+ *
+ * 什么时候用：**读不到 SMTC 会话**的时候（2026-11-24 改）。
+ * 那时不知道当前是在放还是在停 —— 显示哪一个都是猜，猜错了点下去就反了。
+ * 所以显示一个"两态"图标：点一下发媒体键，Windows 自己判断该放还是该停。
+ */
+export function PlayPauseIcon({ className, size = 14 }: IconProps): React.JSX.Element {
+  return (
+    <svg {...base(size)} className={className} aria-hidden>
+      <path d="M4.2 3.2 9.4 7 4.2 10.8Z" fill="currentColor" stroke="none" />
+      <rect x="9.4" y="3.2" width="1.7" height="7.6" rx="0.8" fill="currentColor" stroke="none" />
+    </svg>
+  )
+}
+
 /** 上一首：两个三角形朝左 + 一条竖线 */
 export function PrevIcon({ className, size = 14 }: IconProps): React.JSX.Element {
   return (

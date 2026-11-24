@@ -239,6 +239,25 @@ static async Task<bool> CommandAsync(string cmd)
     var manager = await ManagerAsync(500);
     var s = manager?.GetCurrentSession();
 
+    // ⚠ **toggle 永远走媒体键**：它表示"播放/暂停切换"，
+    //   而读不到会话时我们根本不知道当前是在放还是在停 ——
+    //   SMTC 的 TryPlay/TryPause 是有方向的，用猜的方向会把状态弄反。
+    //   媒体键（VK_MEDIA_PLAY_PAUSE）本身就是切换语义，交给 Windows 判断。
+    if (cmd == "toggle")
+    {
+        bool sent = SendMediaKeyOnly(cmd);
+        Console.WriteLine(J(new
+        {
+            kind = "ack",
+            command = cmd,
+            ok = sent,
+            via = sent ? "mediaKey" : "none",
+            changed = false,
+            error = sent ? "已发全局媒体键（播放/暂停切换），无法验证是否生效" : "媒体键发送失败"
+        }));
+        return sent;
+    }
+
     // ⚠⚠ **没有 SMTC 会话时，也要发媒体键** —— 这不是"放弃"，是能走的路。
     //
     // 背景：媒体键是**全局**的（Windows 直接发给当前媒体会话，不经过 SMTC 查询），
@@ -292,6 +311,8 @@ static async Task<bool> CommandAsync(string cmd)
         "pause" => await s.TryPauseAsync(),
         "next" => await s.TrySkipNextAsync(),
         "prev" => await s.TrySkipPreviousAsync(),
+        // toggle：没有会话时用的（不知道当前状态，让 Windows 自己判断）
+        "toggle" => false,
         _ => false
     };
 
@@ -349,7 +370,7 @@ static bool SendMediaKeyOnly(string cmd)
 {
     ushort vk = cmd switch
     {
-        "play" or "pause" => MediaKeys.VkMediaPlayPause,
+        "play" or "pause" or "toggle" => MediaKeys.VkMediaPlayPause,
         "next" => MediaKeys.VkMediaNext,
         "prev" => MediaKeys.VkMediaPrev,
         _ => (ushort)0
@@ -361,7 +382,7 @@ static bool SendMediaKeyOnly(string cmd)
 
 /// 当前会话的一行状态。没有会话 / 没开音乐软件时给空标题，
 /// 主进程据此把灵动岛上的那一行整个藏掉（不是留个空行）。
-static async Task<object> StateLineAsync()
+static async Task<Dictionary<string, object>> StateLineAsync()
 {
     // watch 路径：**500ms 超时 + 用缓存**。
     // 原来用 3 秒超时且每次都重取 → 没音乐时轮询被拖成 4 秒一拍
@@ -374,29 +395,29 @@ static async Task<object> StateLineAsync()
     var volume = Volume.GetPercent();
     if (s is null)
     {
-        return new
+        return new Dictionary<string, object>
         {
-            kind = "state",
-            source = "",
-            title = "",
-            artist = "",
-            playing = false,
-            volume = volume ?? 0,
-            volumeOk = volume.HasValue
+            ["kind"] = "state",
+            ["source"] = "",
+            ["title"] = "",
+            ["artist"] = "",
+            ["playing"] = false,
+            ["volume"] = volume ?? 0,
+            ["volumeOk"] = volume.HasValue
         };
     }
     var info = new SessionInfo { SourceAppId = s.SourceAppUserModelId };
     await FillAsync(s, info);
     var playing = string.Equals(info.PlaybackState, "Playing", StringComparison.OrdinalIgnoreCase);
-    return new
+    return new Dictionary<string, object>
     {
-        kind = "state",
-        source = info.SourceAppId ?? "",
-        title = info.Title ?? "",
-        artist = info.Artist ?? "",
-        playing,
-        volume = volume ?? 0,
-        volumeOk = volume.HasValue
+        ["kind"] = "state",
+        ["source"] = info.SourceAppId ?? "",
+        ["title"] = info.Title ?? "",
+        ["artist"] = info.Artist ?? "",
+        ["playing"] = playing,
+        ["volume"] = volume ?? 0,
+        ["volumeOk"] = volume.HasValue
     };
 }
 
@@ -558,6 +579,28 @@ static async Task WatchAsync()
     });
 
     int tick = 0;
+    // ---- 自愈计数 ----
+    //
+    // 连续读空（没有会话）达到阈值 → 丢弃缓存的 manager 重取；
+    // 还是读空 → 自己退出，让主进程按它已有的重启机制拉一个新的。
+    //
+    // 为什么要有：SMTC 读会话这条路**时好时坏**（2026-11-23 深夜能读到，
+    // 之后就一直读不到了，RequestAsync 不返回）。
+    // 卡住的是**这个进程里**的 WinRT 调用和缓存的 manager ——
+    // 换一个新进程往往就恢复了。主进程那边已经有"子进程退出就重启"的机制，
+    // 这里主动退出就是用它。
+    //
+    // ⚠ **只在"曾经读到过、后来坏了"时才退出**：
+    //   如果这个进程**从来没读到过**会话（没装音乐软件 / 这台机器的 SMTC 通道坏了），
+    //   退出重来多少次都没用 —— 只会变成
+    //   "退出 → 5 秒后重启 → 再退出"的无限循环（实测踩过，每 20 秒一轮）。
+    //   那种情况下安静地继续跑着（音量照常工作），等真读到了会话再说。
+    int emptyReads = 0;
+    int cacheDrops = 0;
+    bool everReadSession = false;
+    const int EMPTY_READS_TO_DROP_CACHE = 5;   // 连续 5 次读空 → 丢缓存重取
+    const int EMPTY_READS_TO_EXIT = 10;        // 丢过缓存还是读空 → 自己退出
+
     while (true)
     {
         await Task.Delay(1000);
@@ -565,14 +608,60 @@ static async Task WatchAsync()
         try
         {
             // 媒体状态每秒推一次（音量的推送在别的任务里，不受 SMTC 拖累）
-            Console.WriteLine(J(await StateLineAsync()));
+            var line = await StateLineAsync();
+            Console.WriteLine(J(line));
             Console.Out.Flush();
+
+            // 读空计数：state 里 title/artist 都是空 = 没读到会话
+            bool empty = ReadStateIsEmpty(line);
+            if (empty)
+            {
+                emptyReads++;
+                if (emptyReads == EMPTY_READS_TO_DROP_CACHE && ManagerCache.Manager is not null)
+                {
+                    // 缓存的 manager 可能是坏的（拿着它就是读不到）→ 丢掉重取
+                    ManagerCache.Clear();
+                    cacheDrops++;
+                    Console.Error.WriteLine($"连续 {emptyReads} 次读不到会话，丢弃缓存的会话管理器重取");
+                }
+                else if (emptyReads >= EMPTY_READS_TO_EXIT && everReadSession)
+                {
+                    Console.Error.WriteLine(
+                        $"连续 {emptyReads} 次读不到会话（曾经读到过，现在坏了；丢弃缓存 {cacheDrops} 次仍无效），自己退出让主进程重启");
+                    // 用退出码告诉主进程"这是自愈退出，不是崩溃"
+                    Environment.Exit(3);
+                }
+                else if (emptyReads == EMPTY_READS_TO_EXIT && !everReadSession)
+                {
+                    // 从来没读到过 → 退出重来没用，安静继续跑（音量照常可用）
+                    Console.Error.WriteLine(
+                        $"连续 {emptyReads} 次读不到会话（从未读到过会话，重启也没用），继续运行（音量照常可用）");
+                    emptyReads = 0; // 别反复刷这条日志
+                }
+            }
+            else
+            {
+                emptyReads = 0;
+                everReadSession = true;
+            }
         }
         catch (Exception e)
         {
             Console.Error.WriteLine($"轮询失败: {e.Message}");
         }
     }
+}
+
+/**
+ * 判断一条 state 里有没有会话（title/artist 都空 = 没读到）。
+ * 传进来的是 StateLineAsync 返回的对象。
+ */
+static bool ReadStateIsEmpty(object lineObj)
+{
+    if (lineObj is not Dictionary<string, object> map) return true;
+    string title = map.TryGetValue("title", out var t) ? (t as string ?? "") : "";
+    string artist = map.TryGetValue("artist", out var a) ? (a as string ?? "") : "";
+    return title.Length == 0 && artist.Length == 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -614,5 +703,12 @@ internal static class ManagerCache
     {
         Manager = manager;
         At = DateTime.UtcNow;
+    }
+
+    /// <summary>丢掉缓存（自愈用：缓存的 manager 本身可能是坏的）</summary>
+    public static void Clear()
+    {
+        Manager = null;
+        At = DateTime.MinValue;
     }
 }

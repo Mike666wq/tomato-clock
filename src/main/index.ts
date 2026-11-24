@@ -3,7 +3,7 @@
 // 一条不可动摇的架构约定（方案第八节）：计时状态归主进程持有，
 // 窗口关掉（收进托盘）计时照样走，渲染层只读状态、发动作。
 
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, nativeTheme, screen } from 'electron'
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, nativeTheme, powerMonitor, screen } from 'electron'
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { jsonStore, setStoreHooks } from './store/json-store'
@@ -492,6 +492,22 @@ if (!app.requestSingleInstanceLock()) {
     })
     if (settings.showMusicControl) music.enable()
 
+    // ---- 媒体子进程自愈 ----
+    //
+    // SMTC 读会话这条路**时好时坏**：2026-11-23 深夜还能读到歌名，
+    // 之后就读不到了（helper 里的 WinRT 调用卡住不返回）。
+    // 屏幕锁定 / 睡眠恢复正是"之前好用、之后不好用"的分界点。
+    //
+    // 所以：**解锁屏幕 / 从睡眠恢复 → 立刻重启媒体子进程**。
+    // 卡住的是那个进程里的 WinRT 调用和缓存的 manager，换个进程就是新的。
+    const healMedia = (why: string): void => {
+      if (!settings.showMusicControl) return
+      log.info(`媒体子进程自愈：${why}`)
+      music?.restart()
+    }
+    powerMonitor.on('unlock-screen', () => healMedia('解锁屏幕'))
+    powerMonitor.on('resume', () => healMedia('从睡眠恢复'))
+
     // 状态变化 → 广播给所有窗口 + 刷新托盘
     timer.subscribe((state) => {
       for (const win of BrowserWindow.getAllWindows()) {
@@ -716,6 +732,12 @@ if (!app.requestSingleInstanceLock()) {
       // 真机鼠标分不清点的是哪个，还挡着用户那份。
       ipcMain.on('island:dev-offset', (_e, dx: number) => {
         island?.setDevOffsetX(Number(dx) || 0)
+      })
+      // 开发期：手动触发媒体子进程自愈（与 unlock-screen 走同一条路径）。
+      // 真机验证要证明"解锁后子进程 PID 变了"，但 powerMonitor 的
+      // unlock-screen 事件没法从渲染层伪造 —— 用这个口子触发同一个方法。
+      ipcMain.on('media:dev-restart', () => {
+        music?.restart()
       })
     }
 

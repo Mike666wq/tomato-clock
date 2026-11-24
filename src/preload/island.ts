@@ -41,8 +41,9 @@ const api = {
   },  media: {
     /** 当前在放什么；null = 没有音乐在放 */
     getState: (): Promise<MediaSnapshot | null> => ipcRenderer.invoke('media:get-state'),
-    /** 发控制命令 */
-    command: (cmd: 'play' | 'pause' | 'next' | 'prev'): void => ipcRenderer.send('media:command', cmd),
+    /** 发控制命令（toggle = 播放/暂停切换，读不到会话时用） */
+    command: (cmd: 'play' | 'pause' | 'next' | 'prev' | 'toggle'): void =>
+      ipcRenderer.send('media:command', cmd),
     /** 当前系统主音量（0-100）；null = 拿不到音量（界面据此隐藏音量入口） */
     getVolume: (): Promise<number | null> => ipcRenderer.invoke('media:get-volume'),
     /** 设系统主音量（0-100）；主进程会立刻本地更新，界面不用等 */
@@ -87,6 +88,10 @@ if (import.meta.env.DEV) {
   // 开发期专用：把岛横向挪开（机器上同时跑着用户自己装的那份，两个岛会重叠）
   ;(api.island as unknown as Record<string, unknown>)['devOffset'] = (dx: number): void => {
     ipcRenderer.send('island:dev-offset', dx)
+  }
+  // 开发期专用：手动触发媒体子进程自愈（与 unlock-screen 走同一条路径）
+  ;(api.media as unknown as Record<string, unknown>)['devRestart'] = (): void => {
+    ipcRenderer.send('media:dev-restart')
   }
 }
 

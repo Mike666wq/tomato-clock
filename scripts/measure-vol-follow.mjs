@@ -112,11 +112,19 @@ await evaluate(`
 await sleep(1200)
 
 // 悬停展开（必须"移开→移回"：鼠标已经在岛上时不会再发 mouseenter）
+//
+// ⚠ **顺序：先挪窗口再移鼠标**。反过来的话，鼠标相对窗口的位置没变，
+//   Windows 认为鼠标没动，不发 mouseenter → 永远展开不了。
 async function ensureExpanded() {
   for (let i = 0; i < 6; i++) {
     await mouse('move 5 5')
-    await sleep(400)
-    const b = await evaluate(`window.island?.island?.devBounds?.() ?? null`)
+    await sleep(300)
+    await mouse('move 5 5')
+    await sleep(200)
+    // 挪开：不和用户自己装的那份的岛重叠（两个岛都在 x=783 会互相挡）
+    await evaluate(`window.island?.island?.devOffset?.(-500); true`)
+    await sleep(300)
+    const b = await evaluate(`(async () => await window.island?.island?.devBounds?.())()`)
     if (!b) return false
     await mouse(`move ${Math.round(b.x + b.width / 2)} ${Math.round(b.y + 12)}`)
     await sleep(700)
@@ -172,17 +180,28 @@ if (!sliderOpen) {
 const original = realVolume()
 console.log(`  [诊断] 起始系统音量 = ${original}`)
 
-/** 读滑条当前显示的百分比（拇指位置） */
+/**
+ * 读滑条当前显示的百分比。
+ *
+ * ⚠ **读拇指位置，不读 aria-valuenow**：
+ *   滑条 3 秒不动会自动收起 → DOM 被换掉 → aria-valuenow 读不到（null）。
+ *   拇指的 style.left 是百分比，直接从那儿读。
+ */
 async function sliderPercent() {
   const v = await evaluate(
     `(() => {
-      const el = document.querySelector('.island__vol')
-      if (!el) return null
-      const n = Number(el.getAttribute('aria-valuenow'))
-      return Number.isFinite(n) ? n : null
+      const thumb = document.querySelector('.island__vol-thumb')
+      if (!thumb) return null
+      const m = /([\\d.]+)%/.exec(thumb.style.left || '')
+      return m ? Number(m[1]) : null
     })()`
   )
   return typeof v === 'number' ? v : null
+}
+
+/** 滑条还在吗（3 秒不动会自动收起） */
+async function sliderStillOpen() {
+  return await evaluate(`!!document.querySelector('.island__vol')`)
 }
 
 let allFollow = true
@@ -193,11 +212,30 @@ for (const target of [40, 70, 55]) {
   let seen = null
   for (let i = 0; i < 25; i++) {
     await sleep(100)
+    // ⚠ 滑条 3 秒不动会自动收起 → 收起就读不到了。
+    //   每轮检查一次：还在就读，不在就重开（这一轮的时间预算要够）。
+    if (!(await sliderStillOpen())) {
+      await evaluate(`
+        (() => {
+          const btn = [...document.querySelectorAll('.island__music-btn')].find((x) => x.getAttribute('aria-label') === '音量')
+          if (btn) btn.click()
+          return !!btn
+        })()
+      `)
+      await sleep(300)
+    }
     seen = await sliderPercent()
     if (seen === target) break
   }
   const real = realVolume()
-  const ok = seen === target && real === target
+  // ⚠ **都允许差 1**：
+  //   - 系统真值是四舍五入的整数（69.5 → 69 或 70，看舍入方向）
+  //   - helper 的回读有滞后，读到的可能是上一格
+  const ok =
+    seen !== null &&
+    Math.abs(seen - target) <= 1 &&
+    real !== null &&
+    Math.abs(real - target) <= 1
   if (!ok) allFollow = false
   detail.push(`外部设成${target} → 滑条显示${seen}，系统真值${real}`)
 }

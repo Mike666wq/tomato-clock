@@ -14,7 +14,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { MediaSnapshot, Settings, TimerState } from '../../shared/types'
 import { resolveUiTheme } from '../../shared/types'
-import { NextIcon, OpenIcon, PauseIcon, PlayIcon, PrevIcon, SkipIcon, VolumeIcon } from './Icons'
+import {
+  NextIcon,
+  OpenIcon,
+  PauseIcon,
+  PlayIcon,
+  PlayPauseIcon,
+  PrevIcon,
+  SkipIcon,
+  VolumeIcon
+} from './Icons'
 import VolumeSlider from './VolumeSlider'
 
 /** 悬停多久展开 */
@@ -110,13 +119,22 @@ export default function Island(): React.JSX.Element {
 
   /**
    * 展开态要不要显示音乐控制那一行。
-   * 三个条件缺一不可：设置里开了、有音乐在放、歌名或歌手至少有一个。
-   * 没开音乐软件是常态 → 那一行整个消失，不留空行、不报错。
+   *
+   * ⚠ **2026-11-24 改的**：以前要求 `media !== null`（有会话）才显示整行，
+   *   现在**没有会话也显示** —— 只把歌名区留空。
+   *
+   * 原因（肥鱼 2026-11-24 定）：Windows 上读"现在在放什么歌"只有一个官方口子
+   * （SMTC），它**时好时坏** —— 坏的时候读不到会话。
+   * 以前那样写，用户看到的就是"岛上一排按钮，点了一点反应都没有"，
+   * 还以为坏了。现在：**按钮永远在**（控制走媒体键，不依赖读会话），
+   * **歌名有就显示、没有就不显示**。
+   *
+   * 最坏情况是"没歌名、但能控制"，而不是"看着有按钮、点了没反应"。
+   *
+   * 唯一还要求"有会话"的是**播放/暂停图标**：读不到状态就不知道该显示
+   * 播放还是暂停，显示哪个都是猜 —— 那就两个都不显示（见下面的 playingIcon）。
    */
-  const showMusic =
-    (settings?.showMusicControl ?? false) &&
-    media !== null &&
-    (media.title !== '' || media.artist !== '')
+  const showMusic = settings?.showMusicControl ?? false
 
   /**
    * 窗口尺寸由主进程管，这里告诉它"要不要多一行音乐"。
@@ -476,7 +494,7 @@ export default function Island(): React.JSX.Element {
         </span>
       )}
 
-      {showMusic && media ? (
+      {showMusic ? (
         <span className="island__music">
           <span className="island__music-note">♪</span>
           {/* 歌名区 / 音量滑条 **同一个位置**二选一：行高不变 */}
@@ -487,9 +505,10 @@ export default function Island(): React.JSX.Element {
               onInteract={scheduleVolHide}
             />
           ) : (
-            <span className="island__music-text" key={`${media.title}|${media.artist}`}>
-              <span className="island__music-title">{media.title}</span>
-              {media.artist ? <span className="island__music-artist">{media.artist}</span> : null}
+            <span className="island__music-text" key={`${media?.title ?? ''}|${media?.artist ?? ''}`}>
+              {/* 读不到会话时歌名区是空的 —— 按钮照样在（见 showMusic 的注释） */}
+              {media?.title ? <span className="island__music-title">{media.title}</span> : null}
+              {media?.artist ? <span className="island__music-artist">{media.artist}</span> : null}
             </span>
           )}
           <span className="island__music-actions">
@@ -503,18 +522,33 @@ export default function Island(): React.JSX.Element {
             >
               <PrevIcon size={16} />
             </button>
+            {/*
+             * 播放/暂停按钮：
+             *   - 读得到会话 → 显示播放或暂停（按真实状态）
+             *   - **读不到会话 → 显示"播放/暂停"两态图标**，
+             *     点一下发媒体键（play/pause 同一个键，Windows 自己判断当前状态）。
+             *     不用猜"现在是在放还是在停" —— 猜错了点下去就反了。
+             */}
             <button
               className="island__music-btn"
               onClick={(e) => {
                 e.stopPropagation()
-                window.island?.media.command(media.playing ? 'pause' : 'play')
+                // 读得到会话 → 按真实状态发 play/pause；
+                // 读不到 → 发 toggle（切换），让 Windows 自己判断
+                window.island?.media.command(
+                  media?.hasSession ? (media.playing ? 'pause' : 'play') : 'toggle'
+                )
               }}
-              aria-label={media.playing ? '暂停' : '播放'}
+              aria-label={media?.hasSession ? (media.playing ? '暂停' : '播放') : '播放/暂停'}
               // 过渡态：**等真实状态回流**才换图标（以前是乐观更新，
               // 看着像点动了其实音乐没停）
-              data-pending={media.pending ? '1' : undefined}
+              data-pending={media?.pending ? '1' : undefined}
             >
-              {media.playing ? <PauseIcon size={16} /> : <PlayIcon size={16} />}
+              {media?.hasSession ? (
+                media.playing ? <PauseIcon size={16} /> : <PlayIcon size={16} />
+              ) : (
+                <PlayPauseIcon size={16} />
+              )}
             </button>
             <button
               className="island__music-btn"
@@ -527,7 +561,7 @@ export default function Island(): React.JSX.Element {
               <NextIcon size={16} />
             </button>
             {/* 音量入口：拿不到音量就**整个隐藏**，不许显示一个假的 0 */}
-            {media.volumeOk ? (
+            {media?.volumeOk ? (
               <button
                 className="island__music-btn"
                 onClick={toggleVol}

@@ -175,6 +175,10 @@ async function uiVolume() {
 // 机器上同时跑着用户自己装的那份（0.3.3），两个岛会**完全重叠**
 // （都在 x=783）：真机鼠标分不清点的是哪个，还挡着用户那份。
 // 挪到屏幕左边去，物理坐标从窗口实际位置算，不用猜。
+//
+// ⚠ **每次都重置**：别的验证脚本（probe-degraded、measure-music-always-on）
+//   也会挪岛，共享同一个开发实例 → 位置会被改掉。
+//   这里统一挪到同一个地方，脚本之间就互不干扰。
 const DEV_OFFSET_X = -500
 await evaluate(island, `window.island?.island?.devOffset?.(${DEV_OFFSET_X})`)
 await sleep(600)
@@ -410,9 +414,17 @@ const detail = []
 for (const s of steps) {
   const p = await screenPoint('.island__vol-track', s.ratio)
   await mouse(`move ${p.x} ${p.y}`)
-  await sleep(400)
-  // ⚠ 读**系统真值**（独立进程），不读主进程里那个数
-  const v = await realVolume()
+  // ⚠ **要等它稳定，不能读一次就下结论**：
+  //   helper 设完音量后还有回读/推送的滞后，
+  //   固定等 400ms 可能读到的是**上一格**的值
+  //   （实测：20% 那格读到 30 —— 上一格的值）。
+  //   所以轮询等它**变成目标值**，最多等 2 秒；超时才算不通过。
+  let v = null
+  for (let i = 0; i < 20; i++) {
+    await sleep(120)
+    v = await realVolume()
+    if (v !== null && Math.abs(v - s.expect) <= 2) break
+  }
   const ok = v !== null && Math.abs(v - s.expect) <= 2
   if (!ok) allMatch = false
   detail.push(`${s.ratio * 100}%→期望${s.expect} 实得${v}`)

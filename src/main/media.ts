@@ -20,7 +20,13 @@ import { app } from 'electron'
 import { log } from './logger'
 import type { MediaSnapshot } from '../shared/types'
 
-export type MediaCommand = 'play' | 'pause' | 'next' | 'prev'
+/**
+ * 媒体命令。
+ *
+ * `toggle` = 播放/暂停切换，**只在读不到会话时用**：
+ * 那时不知道当前是在放还是在停，让 Windows 自己判断（媒体键本来就是切换语义）。
+ */
+export type MediaCommand = 'play' | 'pause' | 'next' | 'prev' | 'toggle'
 
 /**
  * 等真实状态回流的超时。
@@ -35,6 +41,8 @@ export type MusicController = {
   enable(): void
   /** 关闭：杀掉子进程，状态清空 */
   disable(): void
+  /** 重启子进程（自愈用：解锁/恢复后卡住的那个 WinRT 调用，换个进程就好） */
+  restart(): void
   isEnabled(): boolean
   /** 当前状态；null = 没有音乐在放 */
   getState(): MediaSnapshot | null
@@ -53,6 +61,18 @@ export type MusicController = {
 const MAX_RESTARTS = 3
 /** 重试间隔 */
 const RESTART_DELAY_MS = 5000
+
+/**
+ * helper 的**自愈退出码**。
+ *
+ * helper 连续读不到 SMTC 会话时会自己退出（码 3），让主进程拉一个新的 ——
+ * 那是**正常的自愈**，不是崩溃，**不消耗崩溃重启的配额**。
+ *
+ * ⚠ 不区分的话：自愈退出 3 次之后 `enabled = false`，
+ *   音乐控制就**彻底停用**了 —— 表现是"音量滑条拖了没反应、
+ *   日志里显示设了 80%/60% 但系统音量纹丝不动"（实测踩过）。
+ */
+const SELF_HEAL_EXIT_CODE = 3
 
 /**
  * 找 smtc.exe。
@@ -189,7 +209,12 @@ export function createMusicController(onChange: (state: MediaSnapshot | null) =>
       child = null
       setState(null)
       if (!enabled) return
-      restarts += 1
+      // ⚠ **自愈退出不算崩溃**：helper 读不到 SMTC 会话时会主动退出（码 3），
+      //   让主进程拉一个新的。那是正常的自愈，**不消耗崩溃重启配额**。
+      const selfHeal = code === SELF_HEAL_EXIT_CODE
+      if (!selfHeal) {
+        restarts += 1
+      }
       // ⚠ **退出码要分清"自己崩"和"被外部终止"**：
       //   0xFFFFFFFF（-1，Windows 上显示成 4294967295）是**被外部杀掉**的典型值，
       //   不是自己崩的。两者混在一起写日志，以后就分不清是不是被人关掉了。
@@ -201,11 +226,15 @@ export function createMusicController(onChange: (state: MediaSnapshot | null) =>
         enabled = false
         return
       }
-      log.info(
-        external
-          ? `smtc 子进程被外部终止（code=${code}，不是崩溃），${RESTART_DELAY_MS / 1000}s 后重试`
-          : `smtc 子进程退出（code=${code}），${RESTART_DELAY_MS / 1000}s 后重试`
-      )
+      if (selfHeal) {
+        log.info(`smtc 子进程自愈退出（code=${code}，读不到会话），${RESTART_DELAY_MS / 1000}s 后重启`)
+      } else {
+        log.info(
+          external
+            ? `smtc 子进程被外部终止（code=${code}，不是崩溃），${RESTART_DELAY_MS / 1000}s 后重试`
+            : `smtc 子进程退出（code=${code}），${RESTART_DELAY_MS / 1000}s 后重试`
+        )
+      }
       restartTimer = setTimeout(() => {
         restartTimer = null
         if (enabled) spawnChild()
@@ -232,12 +261,27 @@ export function createMusicController(onChange: (state: MediaSnapshot | null) =>
       volumeOk = volumeValueOk
       // 真实状态回来了 → 过渡态结束
       clearPending()
-      if (!title && !artist) {
+      // ⚠ **有会话 = title 或 artist 至少有一个**。
+      //   没有会话时照样要把状态发出去 —— 因为**音量是系统级的**，
+      //   跟有没有会话无关（不发的��，界面就拿不到 volumeOk → 音量入口被隐藏）。
+      const hasSession = title !== '' || artist !== ''
+      if (!hasSession) {
         // 没有媒体在放：整行藏掉
         // （开发期的假状态除外：它在的时候别把它清掉）
-        if (!devFake) setState(null)
+        if (!devFake) {
+          setState({
+            source: '',
+            title: '',
+            artist: '',
+            playing: false,
+            hasSession: false,
+            volume,
+            volumeOk,
+            pending: ''
+          })
+        }
       } else {
-        setState({ source, title, artist, playing, volume, volumeOk, pending: '' })
+        setState({ source, title, artist, playing, hasSession: true, volume, volumeOk, pending: '' })
       }
       return
     }
@@ -247,7 +291,33 @@ export function createMusicController(onChange: (state: MediaSnapshot | null) =>
       const value = Number(parsed['value'] ?? 0)
       volume = value
       volumeOk = ok
-      if (!state) return
+      // ⚠ **音量跟会话无关**：没有媒体会话时也要广播出去。
+      //   否则 `state` 是 null → 界面拿不到 volumeOk → **音量入口被隐藏** ——
+      //   而音量是系统级的，明明读得到（实测：读得到 25，音量按钮却不显示）。
+      if (!state) {
+        // 没有会话就没有 state 可更新，但音量本身要能传到界面上。
+        // 办法：造一个"只有音量"的状态发出去（界面据此显示音量入口）。
+        if (devFake) {
+          setState({
+            ...devFake,
+            volume: value,
+            volumeOk: ok,
+            pending: ''
+          })
+        } else {
+          onChange({
+            source: '',
+            title: '',
+            artist: '',
+            playing: false,
+            hasSession: false,
+            volume: value,
+            volumeOk: ok,
+            pending: ''
+          })
+        }
+        return
+      }
       setState({ ...state, volume: value, volumeOk: ok })
       return
     }
@@ -292,6 +362,35 @@ export function createMusicController(onChange: (state: MediaSnapshot | null) =>
     }
   }
 
+  /**
+   * 往 helper 的 stdin 写一行。
+   *
+   * ⚠ **写给一个已经死掉的子进程 = 静默丢失**：
+   *   `child.stdin.write` 对已退出的进程**不报错**（写进一个断掉的管道），
+   *   于是主进程日志里明明写着「设系统音量：80%」，
+   *   系统音量却纹丝不动 —— 极难查（实测踩过）。
+   *
+   * 所以：写之前先确认子进程还在；不在就**立刻重启**再写。
+   */
+  const writeToHelper = (line: string): boolean => {
+    if (!child || child.exitCode !== null || !child.stdin || child.stdin.destroyed) {
+      // 子进程不在了（自愈退出 / 崩了）→ 重启一个再来
+      if (enabled && !child) {
+        log.info('媒体子进程不在了，重启后再发命令')
+        restarts = 0
+        spawnChild()
+      }
+      if (!child || !child.stdin || child.stdin.destroyed) return false
+    }
+    try {
+      child.stdin.write(line)
+      return true
+    } catch (err) {
+      log.warn(`发媒体命令失败: ${(err as Error).message}`)
+      return false
+    }
+  }
+
   return {
     enable(): void {
       if (enabled) return
@@ -304,20 +403,55 @@ export function createMusicController(onChange: (state: MediaSnapshot | null) =>
       stop()
       setState(null)
     },
+    /**
+     * **重启 helper 子进程**（自愈用）。
+     *
+     * 为什么需要（2026-11-24）：SMTC 读会话这条路**时好时坏** ——
+     * 昨晚还能读到歌名，之后就读不到了（`RequestAsync` 不返回）。
+     * 一旦卡住，重启这个子进程往往能恢复：
+     * 卡住的是进程内部那个 WinRT 调用和缓存的 manager，换个进程就是新的。
+     *
+     * 触发时机：解锁屏幕 / 从睡眠恢复（那正是"昨晚好用、今天不好用"的分界点）。
+     */
+    restart(): void {
+      if (!enabled) return
+      log.info('重启媒体子进程（解锁/恢复后自愈）')
+      stop()
+      // 清掉计数，否则这次重启会被当成"又崩了一次"而很快放弃
+      restarts = 0
+      spawnChild()
+    },
     isEnabled: () => enabled,
     getState: () => state,
     command(cmd: MediaCommand): void {
-      if (!child || !child.stdin || child.stdin.destroyed) return
-      try {
-        child.stdin.write(`${cmd}\n`)
-      } catch (err) {
-        log.warn(`发音乐命令失败: ${(err as Error).message}`)
-      }
+      if (!writeToHelper(`${cmd}\n`)) return
     },
     setDevState(state: MediaSnapshot | null): void {
       devFake = state
-      if (state) setState({ ...state, pending: '' })
-      else setState(null)
+      if (state) {
+        // ⚠ **假状态不能带 volume / volumeOk**：
+        //   音量是**系统级的真实值**，由 helper 的 kind=volume 行单独推送。
+        //   假状态带一个假音量会把主进程记的音量带偏，
+        //   拖动滑条时"主进程记的值"和"系统真值"就对不上
+        //   （实测：主进程记 10，系统真值 25 —— 断言会误判成"拖动没生效"）。
+        //   所以这里一律用**真实的 volume / volumeOk**。
+        setState({ ...state, volume: volume ?? 0, volumeOk, pending: '' })
+      } else {
+        // ⚠ **清掉假状态 ≠ 把整个状态清空**：
+        //   音量是系统级的，跟会话无关。直接 setState(null) 会把 volumeOk 一起丢掉 →
+        //   界面拿不到它 → **音量入口被隐藏**（明明读得到音量）。
+        //   所以清成"没有会话、但音量照常"的状态。
+        setState({
+          source: '',
+          title: '',
+          artist: '',
+          playing: false,
+          hasSession: false,
+          volume: volume ?? 0,
+          volumeOk,
+          pending: ''
+        })
+      }
     },
     getVolume(): number | null {
       return volumeOk ? volume : null
@@ -330,12 +464,8 @@ export function createMusicController(onChange: (state: MediaSnapshot | null) =>
       volumeOk = true
       // **界面先本地更新**：拖滑条时要跟手，不能等子进程回读
       if (state) setState({ ...state, volume: v })
-      if (!child || !child.stdin || child.stdin.destroyed) return
-      try {
-        child.stdin.write(`vol ${v}\n`)
-      } catch (err) {
-        log.warn(`设音量失败: ${(err as Error).message}`)
-      }
+      // ⚠ 用 writeToHelper：写给死掉的子进程会**静默丢失**（见它的注释）
+      writeToHelper(`vol ${v}\n`)
     },
     dispose(): void {
       enabled = false
