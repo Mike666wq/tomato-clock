@@ -199,49 +199,28 @@ if (devOffsetAvailable) {
 /**
  * 岛的窗口屏幕坐标。
  *
- * ⚠ **打包版没有 devBounds**（开发期口子被编译掉了）→ 退回**枚举窗口**取 rect。
- *   两种来源都是 DIP，可以直接用。
+ * ⚠ **打包版没有 devBounds**（开发期口子被编译掉了）→ 用 `window.screenX/screenY`。
+ *   这两个属性在打包版里**照样有**（是标准 Web API，不是开发期口子），
+ *   而且它们给的就是**当前**窗口位置 —— 展开/收起后会变，正好符合需要。
  *
- * ⚠ **枚举窗口必须按进程路径过滤**：机器上可能同时跑着用户自己装的那份，
- *   而每个岛的窗口标题都是同一个「灵动岛」——
- *   只按标题找会抓到**用户那份**，鼠标点过去点到的也是它，
- *   测出来的东西跟被测的打包版没关系。
- *   被测实例的 exe 路径从 .tmp/instance.json 读。
+ *   ⚠ **不要再用窗口枚举**：它要起一个 PowerShell（~300ms 起），
+ *   有时还要循环重试 —— **加起来可能超过 3 秒**，
+ *   而滑条"3 秒不动就自动收起" —— 滑条会在拿到坐标之前就自己消失。
+ *   （实测栽在这：`.island__vol` 明明刚 PASS 过，下一个查询就没了。）
+ *
+ *   ⚠ **免安装单文件版的窗口属于解包后的临时 exe**，
+ *   按原始文件路径枚举不到它（得沿父进程链找）—— 用 screenX 就没这问题。
  */
 async function getIslandBounds() {
   const dev = await evaluate(island, `window.island?.island?.devBounds?.() ?? null`)
   if (dev && typeof dev.x === 'number') return dev
-  // 打包版：按**进程路径**枚举「灵动岛」窗口
-  const { execFileSync } = await import('node:child_process')
-  const { readFileSync } = await import('node:fs')
-  let exePathLike = ''
-  try {
-    const inst = JSON.parse(readFileSync(path.join(process.cwd(), '.tmp', 'instance.json'), 'utf-8'))
-    exePathLike = inst.exePath ?? ''
-  } catch {
-    /* 读不到就退回只按标题找 */
-  }
-  try {
-    const raw = execFileSync(
-      'powershell',
-      [
-        '-NoProfile',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-File',
-        path.join(process.cwd(), 'scripts', 'find-window-by-path.ps1'),
-        '灵动岛',
-        exePathLike
-      ],
-      { encoding: 'utf-8', timeout: 20000 }
-    ).trim()
-    const m = /(-?\d+),(-?\d+),(-?\d+),(-?\d+)/.exec(raw)
-    if (!m) return null
-    const [l, t, r, b] = m.slice(1, 5).map((n) => Number(n))
-    return { x: l, y: t, width: r - l, height: b - t }
-  } catch {
-    return null
-  }
+  // 打包版：window.screenX/screenY（标准 Web API，打包版也有）
+  const s = await evaluate(
+    island,
+    `({ x: window.screenX, y: window.screenY, w: window.outerWidth, h: window.outerHeight })`
+  )
+  if (!s || typeof s.x !== 'number') return null
+  return { x: s.x, y: s.y, width: s.w, height: s.h }
 }
 
 // 岛的窗口屏幕坐标（DOM 的 rect 是窗口内视口坐标，要加窗口位置才是屏幕坐标）
@@ -325,13 +304,7 @@ async function ensureExpanded() {
 // 等音乐行出现（假状态 + 展开都要生效）
 const gotExpanded = await ensureExpanded()
 console.log(`  [诊断] 岛展开 = ${gotExpanded}`)
-
-// ⚠ **展开成功后立刻缓存窗口位置**：这时窗口才是展开态的尺寸（360 宽）。
-//   窗口枚举每次跑都拿"那一刻"的尺寸 ——
-//   岛收起时是 188 宽、展开时 360 宽，位置也会重新居中。
-//   缓存错了，后面算出来的按钮坐标就在岛外面（实测踩过）。
-await lockExpandedBounds()
-console.log(`  [诊断] 展开后窗口位置（缓存）=${JSON.stringify(expandedBounds)}`)
+console.log(`  [诊断] 展开后窗口位置=${JSON.stringify(await currentBounds())}`)
 
 let musicReady = false
 for (let i = 0; i < 25; i++) {
@@ -382,36 +355,12 @@ async function currentBounds() {
   return await getIslandBounds()
 }
 
-/**
- * 展开后的窗口位置（**缓存**）。
- *
- * ⚠ **用 var 而不是 let**：`let` 有暂时性死区（TDZ）——
- *   下面展开成功后就会调用 lockExpandedBounds，
- *   而声明在后面的话会报 "Cannot access 'expandedBounds' before initialization"。
- *   `var` 没有这个问题（值是 undefined，逻辑一样）。
- */
-var expandedBounds = null
-
-/**
- * 展开后的窗口位置（**缓存**）。
- *
- * ⚠ **为什么缓存**：窗口枚举（find-window-by-path.ps1）每次跑都拿到
- *   **那一刻**的窗口尺寸 —— 岛展开/收起时宽度会变（189 ↔ 360），
- *   窗口重新贴顶居中，x 也跟着变。
- *   拖动滑条的过程中窗口可能因为别的原因变化，
- *   于是"算坐标用的窗口位置"和"实际窗口位置"对不上 → 点空。
- *
- *   展开之后缓存一次，拖动全程用同一个值 —— 期间窗口不会变
- *   （音乐行展开后尺寸是固定的）。
- *
- * ⚠ **必须在展开成功后立刻缓存**：这时窗口才是展开态的尺寸。
- *   （实测：在展开前缓存会拿到收起态的 188 宽 → 算出的按钮坐标在岛外面。）
- */
-
 async function screenPoint(selector, ratio) {
-  // ⚠ 优先用**缓存的展开位置**：窗口枚举每次拿到的是"那一刻"的尺寸，
-  //   岛展开/收起时宽度会变并重新居中 —— 拖动过程中用错位置会点到空处。
-  const b = expandedBounds ?? (await currentBounds())
+  // ⚠ **每次都实时取窗口位置**：
+  //   打包版用 `window.screenX/screenY`（一次 CDP 调用，快），
+  //   它跟着展开/收起实时变 —— 正好符合"每次都要重新读"的需要。
+  //   （开发版走 devBounds，同样是实时的。）
+  const b = await currentBounds()
   if (!b) return null
   const rect = await evaluate(
     island,
@@ -445,24 +394,10 @@ async function screenPoint(selector, ratio) {
  * ⚠ **必须在展开成功后立刻缓存**：这时窗口才是展开态的尺寸。
  *   （实测：在展开前缓存会拿到收起态的 188 宽 → 算出的按钮坐标在岛外面。）
  */
-async function lockExpandedBounds() {
-  if (expandedBounds) return expandedBounds
-  for (let i = 0; i < 10; i++) {
-    const b = await currentBounds()
-    if (b && b.width > 250) {
-      expandedBounds = b
-      return b
-    }
-    await sleep(200)
-  }
-  expandedBounds = await currentBounds()
-  return expandedBounds
-}
 
 /** 按 aria-label 找按钮，返回屏幕坐标 */
 async function screenPointByLabel(label) {
-  // ⚠ 用**缓存的展开位置**（见 lockExpandedBounds 的注释）
-  const b = expandedBounds ?? (await currentBounds())
+  const b = await currentBounds()
   if (!b) return null
   const rect = await evaluate(
     island,
@@ -475,6 +410,25 @@ async function screenPointByLabel(label) {
   )
   if (!rect) return null
   return { x: Math.round(b.x + rect.x), y: Math.round(b.y + rect.y) }
+}
+
+// ---------- 拖动前的核对：**必须在点开滑条之前** ----------
+//
+// ⚠ **为什么放前面**：滑条 3 秒不动会自动收起（VOL_HIDE_MS）。
+//   核对要起独立进程读系统音量，耗掉一两秒 ——
+//   如果放在点开之后，滑条会在这段时间里自己收走，
+//   后面就找不到滑条元素（实测打包版就栽在这）。
+//
+// 原值：**用独立进程读**（不是主进程里那个乐观值）
+const original = await realVolume()
+const originalUi = await uiVolume()
+check(
+  '拖动前：独立进程读到的系统音量 == 主进程读到的（同一个设备）',
+  original !== null && originalUi !== null && Math.abs(original - originalUi) <= 1,
+  `独立进程=${original} 主进程=${originalUi}`
+)
+if (original === null) {
+  console.log('  [诊断] 独立进程读不到系统音量 —— 音频设备或默认端点有问题')
 }
 
 // 先把鼠标移到喇叭按钮上（真实移动），再按下滑条
@@ -518,19 +472,6 @@ if (!opened) {
   process.exit(1)
 }
 
-// ---------- 真机拖动：按下 → 分 5 段移动 → 抬起 ----------
-// 原值：**用独立进程读**（不是主进程里那个乐观值）
-const original = await realVolume()
-const originalUi = await uiVolume()
-check(
-  '拖动前：独立进程读到的系统音量 == 主进程读到的（同一个设备）',
-  original !== null && originalUi !== null && Math.abs(original - originalUi) <= 1,
-  `独立进程=${original} 主进程=${originalUi}`
-)
-if (original === null) {
-  console.log('  [诊断] 独立进程读不到系统音量 —— 音频设备或默认端点有问题')
-}
-
 // ⚠ **滑条 3 秒不动会自动收起**（VOL_HIDE_MS）。
 //   上面"拖动前"的核对要起独立进程读音量，耗掉一两秒 ——
 //   滑条可能已经收起来了，后面就找不到滑条元素（实测打包版就栽在这）。
@@ -551,17 +492,16 @@ if (sliderGone) {
 const sliderOpen = await evaluate(island, `!!document.querySelector('.island__vol')`)
 check('滑条是开着的（能拖）', sliderOpen === true, `.island__vol=${sliderOpen}`)
 
-// ⚠⚠ **点开滑条后窗口位置会变**：歌名区被换成滑条，宽度变了 →
-//   窗口重新贴顶居中 → **x 也变了**。
-//   用点开之前的坐标去按滑条 → 按到空处 → 滑条没被"交互"到 →
-//   3 秒不动自动收起的定时器照跑 → **滑条在拖动开始前就消失了**
-//   （实测：按下后 `.island__vol` 直接没了，岛还展开着）。
+// ⚠ **点开滑条后不要再取窗口位置**。
 //
-//   所以：**点开之后必须重新取一次窗口位置**，用它算滑条坐标。
-expandedBounds = null
-await lockExpandedBounds()
-console.log(`  [诊断] 点开滑条后的窗口位置（重新取）=${JSON.stringify(expandedBounds)}`)
-
+//   取窗口位置要起一个 PowerShell 查窗口（~300ms+），有时还要循环重试 ——
+//   **加起来可能超过 3 秒**，而滑条"3 秒不动就自动收起" ——
+//   滑条会在拿到坐标之前就自己消失（实测：`.island__vol` 明明刚 PASS 过，
+//   下一个查询就没了）。
+//
+//   实测点开滑条前后窗口位置**没有变**（都是 698/360）——
+//   歌名区换成滑条，宽度没变（滑条宽度是固定的），所以窗口不用重新居中。
+//   展开后缓存的那个位置直接用就行。
 const start = await screenPoint('.island__vol-track', 0.8)
 if (!start) {
   console.log('  [诊断] 拿不到滑条的屏幕坐标（滑条元素找不到或窗口位置拿不到）')
@@ -569,10 +509,11 @@ if (!start) {
   // ⚠ 按下之前先确认那个点上确实是滑条（别按了个寂寞）。
   //   滑条是**独立元素**，按错地方 → 触发不了它的 pointerdown →
   //   指针捕获没建立 → 也重置不了"3 秒自动收起"的定时器 → 滑条自己消失。
+  const bNow2 = await currentBounds()
   const hit = await evaluate(
     island,
     `(() => {
-      const el = document.elementFromPoint(${start.x - expandedBounds.x}, ${start.y - expandedBounds.y})
+      const el = document.elementFromPoint(${start.x - bNow2.x}, ${start.y - bNow2.y})
       if (!el) return 'null'
       return (el.className || el.tagName || '') + ' / ' + (el.getAttribute('aria-label') || '')
     })()`

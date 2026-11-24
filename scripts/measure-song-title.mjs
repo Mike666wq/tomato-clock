@@ -144,7 +144,15 @@ const mouse = (cmd) =>
   })
 
 async function currentBounds() {
-  return await evaluate(island, `(async () => await window.island?.island?.devBounds?.())()`)
+  // ⚠ **打包版没有 devBounds**（开发期口子被编译掉了）→
+  //   用 `window.screenX/screenY`（标准 Web API，打包版也有）。
+  const dev = await evaluate(island, `(async () => await window.island?.island?.devBounds?.())()`)
+  if (dev && typeof dev.x === 'number') return dev
+  const s = await evaluate(
+    island,
+    `({ x: window.screenX, y: window.screenY, w: window.outerWidth, h: window.outerHeight })`
+  )
+  return s && typeof s.x === 'number' ? { x: s.x, y: s.y, width: s.w, height: s.h } : null
 }
 async function ensureExpanded() {
   for (let i = 0; i < 6; i++) {
@@ -163,16 +171,22 @@ async function ensureExpanded() {
 await evaluate(island, `window.island.settings.save({ showMusicControl: true }); true`)
 await sleep(1200)
 
-// ⚠ **必须把开发实例挪开**：用户自己装的那份 0.3.6 也在跑，
-//   两个岛都在屏幕正上方中央（x 都在 783 附近）——
-//   真机鼠标点屏幕坐标时，命中的是**谁的窗口**不确定。
-//   命中用户那份的话，读到的是**旧的 helper**（它发的是 "window-title"），
-//   界面上测出来的东西跟开发版没关系。
+// ⚠ **必须把被测实例挪开**（如果能挪）：用户自己装的那份也可能在跑，
+//   两个岛都在屏幕正上方中央 —— 真机鼠标点屏幕坐标时，命中谁的窗口不确定。
+//   命中用户那份的话，读到的是**旧版本**的数据，跟被测的没关系。
 //
-//   （2026-11-24 踩过：界面上的 titleSource 一直是空的，
-//    因为点的是用户那份 0.3.6 的岛。）
-await evaluate(island, `window.island?.island?.devOffset?.(-500); true`)
-await sleep(500)
+//   打包版没有 devOffset（开发期口子被编译掉了）→ 挪不开；
+//   那种情况下靠"窗口位置 + 进程路径"认。
+const hasDevOffset = await evaluate(
+  island,
+  `typeof window.island?.island?.devOffset === 'function'`
+)
+if (hasDevOffset) {
+  await evaluate(island, `window.island?.island?.devOffset?.(-500); true`)
+  await sleep(500)
+} else {
+  console.log('  [诊断] 打包版：没有 devOffset，岛挪不开（靠窗口位置区分）')
+}
 
 const expanded = await ensureExpanded()
 check('岛已悬停展开', expanded === true, `expanded=${expanded}`)

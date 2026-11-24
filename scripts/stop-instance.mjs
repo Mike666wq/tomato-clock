@@ -42,10 +42,10 @@ $all | ForEach-Object { Write-Output ("  PID=" + $_.ProcessId + "  " + $_.Execut
 if ($all.Count -eq 0) { Write-Output '  （一个都没有）' }
 `
 
-function runPowerShell(script) {
+function runPowerShell(script, extraEnv = {}) {
   return execFileSync('powershell', ['-NoProfile', '-Command', script], {
     encoding: 'utf-8',
-    env: { ...process.env, POMO_EXE_PATTERN: pattern }
+    env: { ...process.env, POMO_EXE_PATTERN: pattern, ...extraEnv }
   })
 }
 
@@ -64,14 +64,65 @@ if (pids.length === 0) {
   process.exit(0)
 }
 
-for (const pid of pids) {
+// ---- 收集**进程树**（不只清单里那几个 PID） ----
+//
+// ⚠ **为什么还要按进程树收**：免安装单文件版（portable-single）运行时
+//   会把自己解包到临时目录再跑真正的 exe ——
+//   **真正的窗口/子进程是解包后的那些，它们的 PID 不在清单里**
+//   （清单只记了 launcher 一个）。
+//   结果：收尾只关掉 1 个，留下一堆孤儿进程（实测留了 11 个）。
+//
+//   按**父进程链**收是安全的：链上的每个进程都是我们启动的那个的后代，
+//   不是"按名字猜"（用户自己装的那份不在链上，不会被误伤）。
+const treePs = `
+$ErrorActionPreference = 'SilentlyContinue'
+$roots = @($env:POMO_ROOTS -split ',' | Where-Object { $_ -ne '' } | ForEach-Object { [int]$_ })
+$all = Get-CimInstance Win32_Process
+$tree = New-Object System.Collections.ArrayList
+$stack = New-Object System.Collections.ArrayList
+foreach ($r in $roots) { [void]$stack.Add($r) }
+while ($stack.Count -gt 0) {
+  $cur = $stack[0]
+  $stack.RemoveAt(0)
+  if ($tree -contains $cur) { continue }
+  [void]$tree.Add($cur)
+  foreach ($c in ($all | Where-Object { $_.ParentProcessId -eq $cur })) { [void]$stack.Add([int]$c.ProcessId) }
+}
+foreach ($pid2 in $tree) {
+  $p = $all | Where-Object { $_.ProcessId -eq $pid2 }
+  if ($p) { Write-Output ("  PID=$pid2  " + $p.ExecutablePath) }
+}
+`
+
+const treeOut = runPowerShell(treePs, { POMO_ROOTS: pids.join(',') })
+const treePids = [...treeOut.matchAll(/PID=(\d+)/g)].map((m) => Number(m[1]))
+console.log(`[收尾] 进程树（含解包出来的子进程）：${treePids.join(',')}`)
+
+for (const pid of treePids) {
   try {
     process.kill(pid)
   } catch {
     /* 已经退了 */
   }
 }
-console.log(`[收尾] 已关掉 ${pids.length} 个（都是这次启动的）`)
+console.log(`[收尾] 已关掉 ${treePids.length} 个（都是这次启动的，含子进程）`)
+
+// 等一下，确认真的退了（免安装版解包出来的进程有时要多等一拍）
+await new Promise((r) => setTimeout(r, 1500))
+const left = runPowerShell(treePs, { POMO_ROOTS: pids.join(',') })
+const leftPids = [...left.matchAll(/PID=(\d+)/g)].map((m) => Number(m[1]))
+if (leftPids.length > 0) {
+  console.log(`[收尾] 还有 ${leftPids.length} 个没退，再强杀一次`)
+  for (const pid of leftPids) {
+    try {
+      process.kill(pid, 'SIGKILL')
+    } catch {
+      /* 已经退了 */
+    }
+  }
+} else {
+  console.log('[收尾] 确认全退了')
+}
 
 rmSync(instanceFile, { force: true })
 console.log('[收尾] 清单已清')

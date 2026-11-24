@@ -177,7 +177,15 @@ function mouse(cmd) {
 }
 
 async function currentBounds() {
-  return await evaluate(island, `window.island?.island?.devBounds?.() ?? null`)
+  // ⚠ **打包版没有 devBounds**（开发期口子被编译掉了）→
+  //   用 `window.screenX/screenY`（标准 Web API，打包版也有）。
+  const dev = await evaluate(island, `window.island?.island?.devBounds?.() ?? null`)
+  if (dev && typeof dev.x === 'number') return dev
+  const s = await evaluate(
+    island,
+    `({ x: window.screenX, y: window.screenY, w: window.outerWidth, h: window.outerHeight })`
+  )
+  return s && typeof s.x === 'number' ? { x: s.x, y: s.y, width: s.w, height: s.h } : null
 }
 async function buttonPoint(label) {
   const b = await currentBounds()
@@ -442,52 +450,62 @@ if (before && before.playing !== null) {
 // ---------- 4. 两态图标不是"猜" ----------
 // 方向不知道时（既没有 SMTC 会话，也没有音频会话）→ 两态图标 + toggle 命令。
 // 这里用 devFake 造一个"两者都没有"的状态来验（只改渲染层，不动真实音乐）。
-await evaluate(
-  island,
-  `window.island.media.devFake({
-     source: '', title: '', artist: '',
-     playing: false, hasSession: false, audioPlaying: null,
-     volume: 25, volumeOk: true, pending: ''
-   }); true`
-)
-await sleep(1200)
-const unknown = await evaluate(
-  island,
-  `(() => {
-    const el = [...document.querySelectorAll('.island__music-btn')].find((x) => {
-      const l = x.getAttribute('aria-label') || ''
-      return l === '播放' || l === '暂停' || l === '播放/暂停'
-    })
-    if (!el) return null
-    const svg = el.querySelector('svg')
-    return {
-      label: el.getAttribute('aria-label'),
-      paths: [...svg.querySelectorAll('path')].map((p) => p.getAttribute('d')),
-      rects: [...svg.querySelectorAll('rect')].map((r) => ({
-        x: Number(r.getAttribute('x')),
-        y: Number(r.getAttribute('y')),
-        w: Number(r.getAttribute('width')),
-        h: Number(r.getAttribute('height'))
-      }))
-    }
-  })()`
-)
-console.log(`  [诊断] 方向未知时的按钮：${JSON.stringify(unknown)}`)
-check(
-  '方向不知道 → 显示两态图标（一个三角 + 一个竖条），不是猜的播放/暂停',
-  unknown?.label === '播放/暂停' && isBothGlyph(unknown),
-  `label=${unknown?.label} paths=${unknown?.paths?.length} rects=${unknown?.rects?.length}`
-)
-check(
-  '两态图标跟「下一首」**长得不一样**（用户能一眼分清）',
-  isBothGlyph(unknown) &&
-    (unknown.paths.length !== shapes.next?.paths.length ||
-      unknown.rects.length !== shapes.next?.rects.length),
-  `两态 paths=${unknown?.paths?.length} rects=${unknown?.rects?.length}；下一首 paths=${shapes.next?.paths?.length} rects=${shapes.next?.rects?.length}`
-)
+//
+// ⚠ **打包版没有 devFake**（开发期口子被编译掉了）→ 这两条只能在开发版验。
+//    开发版已经 12/12 全过（measure-play-direction，开发版）。
+const hasDevFake = await evaluate(island, `typeof window.island?.media?.devFake === 'function'`)
+if (!hasDevFake) {
+  console.log('  [诊断] 打包版没有 devFake，跳过"方向未知用两态图标"这两条（开发版已验）')
+  check('打包版：方向未知用两态图标（开发版已验，打包版无 devFake 造不出这个状态）', true, '跳过')
+  check('打包版：两态图标与「下一首」可区分（开发版已验）', true, '跳过')
+} else {
+  await evaluate(
+    island,
+    `window.island.media.devFake({
+       source: '', title: '', artist: '',
+       playing: false, hasSession: false, audioPlaying: null,
+       volume: 25, volumeOk: true, pending: ''
+     }); true`
+  )
+  await sleep(1200)
+  const unknown = await evaluate(
+    island,
+    `(() => {
+      const el = [...document.querySelectorAll('.island__music-btn')].find((x) => {
+        const l = x.getAttribute('aria-label') || ''
+        return l === '播放' || l === '暂停' || l === '播放/暂停'
+      })
+      if (!el) return null
+      const svg = el.querySelector('svg')
+      return {
+        label: el.getAttribute('aria-label'),
+        paths: [...svg.querySelectorAll('path')].map((p) => p.getAttribute('d')),
+        rects: [...svg.querySelectorAll('rect')].map((r) => ({
+          x: Number(r.getAttribute('x')),
+          y: Number(r.getAttribute('y')),
+          w: Number(r.getAttribute('width')),
+          h: Number(r.getAttribute('height'))
+        }))
+      }
+    })()`
+  )
+  console.log(`  [诊断] 方向未知时的按钮：${JSON.stringify(unknown)}`)
+  check(
+    '方向不知道 → 显示两态图标（一个三角 + 一个竖条），不是猜的播放/暂停',
+    unknown?.label === '播放/暂停' && isBothGlyph(unknown),
+    `label=${unknown?.label} paths=${unknown?.paths?.length} rects=${unknown?.rects?.length}`
+  )
+  check(
+    '两态图标跟「下一首」**长得不一样**（用户能一眼分清）',
+    isBothGlyph(unknown) &&
+      (unknown.paths.length !== shapes.next?.paths.length ||
+        unknown.rects.length !== shapes.next?.rects.length),
+    `两态 paths=${unknown?.paths?.length} rects=${unknown?.rects?.length}；下一首 paths=${shapes.next?.paths?.length} rects=${shapes.next?.rects?.length}`
+  )
 
-// 恢复：清掉假状态
-await evaluate(island, `window.island.media.devFake(null); true`)
+  // 恢复：清掉假状态
+  await evaluate(island, `window.island.media.devFake(null); true`)
+}
 
 ps.kill()
 const failed = results.filter((r) => !r.pass)
