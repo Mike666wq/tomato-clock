@@ -183,10 +183,36 @@ const DEV_OFFSET_X = -500
 await evaluate(island, `window.island?.island?.devOffset?.(${DEV_OFFSET_X})`)
 await sleep(600)
 
+/**
+ * 岛的窗口屏幕坐标。
+ *
+ * ⚠ **打包版没有 devBounds**（开发期口子被编译掉了）→ 退回**枚举窗口**取 rect。
+ *   两种来源都是 DIP，可以直接用。
+ */
+async function getIslandBounds() {
+  const dev = await evaluate(island, `window.island?.island?.devBounds?.() ?? null`)
+  if (dev && typeof dev.x === 'number') return dev
+  // 打包版：枚举「灵动岛」窗口
+  const { execFileSync } = await import('node:child_process')
+  try {
+    const raw = execFileSync(
+      'powershell',
+      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(process.cwd(), 'scripts', 'find-window.ps1'), '灵动岛'],
+      { encoding: 'utf-8', timeout: 20000 }
+    ).trim()
+    const m = /(-?\d+),(-?\d+),(-?\d+),(-?\d+)/.exec(raw)
+    if (!m) return null
+    const [l, t, r, b] = m.slice(1, 5).map((n) => Number(n))
+    return { x: l, y: t, width: r - l, height: b - t }
+  } catch {
+    return null
+  }
+}
+
 // 岛的窗口屏幕坐标（DOM 的 rect 是窗口内视口坐标，要加窗口位置才是屏幕坐标）
-const bounds = await evaluate(island, `window.island?.island?.devBounds?.() ?? null`)
+const bounds = await getIslandBounds()
 if (!bounds) {
-  console.log('NO_BOUNDS（开发期 IPC 不可用）')
+  console.log('NO_BOUNDS（拿不到岛的窗口位置：devBounds 不可用，窗口枚举也失败）')
   process.exit(1)
 }
 
@@ -302,7 +328,7 @@ if (!musicReady) {
  *   用展开前量到的 bounds 去算展开后的按钮位置，会点到别的地方去。
  */
 async function currentBounds() {
-  return await evaluate(island, `window.island?.island?.devBounds?.() ?? null`)
+  return await getIslandBounds()
 }
 
 async function screenPoint(selector, ratio) {
