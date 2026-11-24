@@ -62,34 +62,43 @@ return 0;
 
 static string J(object o) => JsonSerializer.Serialize(o);
 
-static async Task<GlobalSystemMediaTransportControlsSessionManager?> ManagerAsync(int timeoutMs = 3000)
+/**
+ * 拿会话管理器。
+ *
+ * @param timeoutMs 等多久算超时（毫秒）
+ * @param useCache   是否允许用缓存
+ */
+static async Task<GlobalSystemMediaTransportControlsSessionManager?> ManagerAsync(int timeoutMs, bool useCache = true)
 {
-    // ⚠ **超时必须套在「整个读取任务」外面，不能用 op.AsTask()**：
-    //   RequestAsync() 返回的是 WinRT 的 IAsyncOperation。
+    // 有缓存就直接用：不再等 RequestAsync
+    if (useCache)
+    {
+        var cached = ManagerCache.Get();
+        if (cached is not null) return cached;
+    }
+
+    // ⚠ 超时套在「整个读取任务」外面，不要用 op.AsTask()：
+    //   RequestAsync() 返回的是 WinRT 的 IAsyncOperation，
     //   `await` 它走的是 WinRT 自己的调度（能正常完成）；
-    //   而 `op.AsTask()` 把它转成普通 Task 后，在这台机器上**一直不返回** ——
-    //   实测改用 AsTask() 后 `smtc current` 每次都撞满 10 秒超时、
-    //   且一条会话都读不到（当时 QQ 音乐明明在放、歌名还在变）。
-    //   这是 2026-11-24 中午踩的坑，别再改回 AsTask()。
-    //
-    // 超时套在哪：ReadManagerAsync() 里**直接 await RequestAsync()**
-    //（跟 2026-11-23 晚上那版一模一样，那版能正常读到会话），
-    // 外层用 WithTimeout 跟一个延时赛跑，迟了就当"没有会话"。
+    //   而 AsTask() 转成普通 Task 后在这台机器上读不到会话。
     var work = ReadManagerAsync();
-    return await WithTimeout<GlobalSystemMediaTransportControlsSessionManager?>(work, timeoutMs, null);
+    var m = await WithTimeout<GlobalSystemMediaTransportControlsSessionManager?>(work, timeoutMs, null);
+    if (m is not null)
+    {
+        ManagerCache.Put(m);
+    }
+    else if (useCache)
+    {
+        // 这次没取到，但缓存还在 → 继续用旧的（总比没有强）
+        return ManagerCache.Manager;
+    }
+    return m;
 }
 
 /// <summary>
 /// 读取会话管理器。
 ///
-/// ⚠ 这里**必须直接 `await RequestAsync()`**（WinRT 的 IAsyncOperation 自带 awaiter），
-///   不要改成 `op.AsTask()` —— 见 ManagerAsync 的注释。
-///
-/// ⚠⚠ **必须在 STA 线程上调用**：控制台程序默认是 **MTA**，
-///   而 `GlobalSystemMediaTransportControlsSessionManager.RequestAsync()`
-///   在 MTA 线程上**会一直不返回**（实测：每次都撞满超时，一条会话都读不到，
-///   当时 QQ 音乐明明在放、歌名还在变）。
-///   把这段放到一个专门的 STA 线程上跑就正常了。
+/// ⚠ 这里**直接 `await RequestAsync()`**（WinRT 的 IAsyncOperation 自带 awaiter）。
 /// </summary>
 static async Task<GlobalSystemMediaTransportControlsSessionManager?> ReadManagerAsync()
 {
@@ -162,9 +171,9 @@ static async Task FillAsync(GlobalSystemMediaTransportControlsSession s, Session
     }
 }
 
-static async Task<List<SessionInfo>> SessionsAsync(int timeoutMs)
+static async Task<List<SessionInfo>> SessionsAsync(int timeoutMs, bool useCache)
 {
-    var manager = await ManagerAsync(timeoutMs);
+    var manager = await ManagerAsync(timeoutMs, useCache);
     var list = new List<SessionInfo>();
     if (manager is null) return list;
     foreach (var s in manager.GetSessions())
@@ -178,10 +187,9 @@ static async Task<List<SessionInfo>> SessionsAsync(int timeoutMs)
 
 static async Task ListAsync()
 {
-    // 一次性命令给**更长的超时**（10 秒）：它不是常驻循环，等得起。
-    // 区分两种"空"：真的没有会话 vs 拿会话管理器超时了 ——
-    // 后者要写进输出，否则看起来跟"没装音乐软件"一样。
-    var sessions = await SessionsAsync(10000);
+    // 一次性命令给**更长的超时**（10 秒）且**不用缓存**：
+    // 它不是常驻循环，等得起；每次都重新取，避免拿到过期的 manager。
+    var sessions = await SessionsAsync(10000, useCache: false);
     Console.WriteLine(J(sessions));
     foreach (var s in sessions)
     {
@@ -192,7 +200,7 @@ static async Task ListAsync()
 
 static async Task CurrentAsync()
 {
-    var manager = await ManagerAsync(10000);
+    var manager = await ManagerAsync(10000, useCache: false);
     var s = manager?.GetCurrentSession();
     if (s is null)
     {
@@ -225,15 +233,16 @@ static async Task<(bool playing, string title)> ReadPlayingAsync(GlobalSystemMed
 /// </summary>
 static async Task<bool> CommandAsync(string cmd)
 {
-    var manager = await ManagerAsync(); // ManagerAsync 内部已有 3 秒超时
+    // 命令路径：**500ms 超时 + 用缓存**。
+    // 缓存命中时是 0 等待；没命中也只等 500ms ——
+    // 命令不该为了拿状态先堵 3 秒（那样媒体键回退要等 3 秒才发得出）。
+    var manager = await ManagerAsync(500);
     var s = manager?.GetCurrentSession();
 
-    // ⚠⚠ **没有 SMTC 会话时，也要发媒体键** —— 这不是"放弃"，是唯一的路。
+    // ⚠⚠ **没有 SMTC 会话时，也要发媒体键** —— 这不是"放弃"，是能走的路。
     //
-    // 背景（2026-11-24 中午实测）：这台机器上 `RequestAsync()` **一直不返回**
-    // （每次都撞满超时），所以**永远拿不到会话**。
-    // 而媒体键是**全局**的（Windows 直接发给当前媒体会话，不经过 SMTC 查询）——
-    // 肥鱼 2026-11-23 深夜实测过：媒体键能控制 QQ 音乐。
+    // 背景：媒体键是**全局**的（Windows 直接发给当前媒体会话，不经过 SMTC 查询），
+    // 所以即使读不到会话，命令照样发得出去。
     //
     // 以前这里是 `if (s is null) return false;` —— 直接放弃，
     // 于是"先 SMTC、600ms 没动静就补发媒体键"这条策略在
@@ -331,8 +340,8 @@ static async Task<bool> CommandAsync(string cmd)
 ///
 /// 什么时候用：
 ///   1. SMTC 命令发了但状态没变（QQ 音乐只肯读、不肯收）；
-///   2. **压根读不到 SMTC 会话** —— 这台机器上 RequestAsync 一直不返回，
-///      而媒体键是全局的，不需要会话也能发（实测能控制 QQ 音乐）。
+///   2. **读不到 SMTC 会话** —— 媒体键是全局的，不需要会话也能发
+///      （2026-11-24 中午实测：媒体键能控制 QQ 音乐，SMTC 却读不到它）。
 ///
 /// 返回 false = 这个命令没有对应的媒体键（未知命令）。
 /// </summary>
@@ -354,7 +363,12 @@ static bool SendMediaKeyOnly(string cmd)
 /// 主进程据此把灵动岛上的那一行整个藏掉（不是留个空行）。
 static async Task<object> StateLineAsync()
 {
-    var manager = await ManagerAsync(); // ManagerAsync 内部已有 3 秒超时
+    // watch 路径：**500ms 超时 + 用缓存**。
+    // 原来用 3 秒超时且每次都重取 → 没音乐时轮询被拖成 4 秒一拍
+    // （实测：每条 state 间隔 4015ms = 3 秒超时 + 1 秒轮询）。
+    // 500ms + 缓存后，轮询回到 1 秒一拍，
+    // 音乐关掉后那颗歌名也能在 ~1.5 秒内从岛上消失。
+    var manager = await ManagerAsync(500);
     var s = manager?.GetCurrentSession();
     // 系统主音量：拿不到就是 null（界面据此隐藏音量入口，不显示假的 0）
     var volume = Volume.GetPercent();
@@ -558,5 +572,47 @@ static async Task WatchAsync()
         {
             Console.Error.WriteLine($"轮询失败: {e.Message}");
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 类型声明必须在顶层语句之后（C# 的要求）。
+// ---------------------------------------------------------------------------
+
+/**
+ * 会话管理器的缓存。
+ *
+ * 为什么缓存：`RequestAsync()` 有时要好几秒才返回（甚至不返回）。
+ * 每秒轮询都重取一次 → 轮询节奏被它拖死，而且**拿到过一次的 manager 之后
+ * 完全可以复用**（它是系统级的句柄，会话列表自己会变）。
+ *
+ * 缓存在这里有两个好处：
+ *   1. 轮询节奏恢复成 1 秒（原来被 3 秒超时拖成 4 秒一拍）；
+ *   2. 命令不必等 3 秒才走媒体键回退。
+ */
+internal static class ManagerCache
+{
+    /// <summary>缓存的会话管理器；null = 还没取到过</summary>
+    public static GlobalSystemMediaTransportControlsSessionManager? Manager;
+
+    /// <summary>缓存是什么时候取的</summary>
+    public static DateTime At = DateTime.MinValue;
+
+    /// <summary>缓存有效期：5 分钟。系统会话变化不需要重新取，GetSessions 会自己反映</summary>
+    public const int ValidMinutes = 5;
+
+    /// <summary>取缓存里的（过期的当没有）</summary>
+    public static GlobalSystemMediaTransportControlsSessionManager? Get()
+    {
+        if (Manager is null) return null;
+        if ((DateTime.UtcNow - At).TotalMinutes >= ValidMinutes) return null;
+        return Manager;
+    }
+
+    /// <summary>存起来</summary>
+    public static void Put(GlobalSystemMediaTransportControlsSessionManager manager)
+    {
+        Manager = manager;
+        At = DateTime.UtcNow;
     }
 }
