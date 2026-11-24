@@ -370,6 +370,20 @@ static async Task WatchAsync()
         });
     }
 
+    // ---- 命令通道 ----
+    //
+    // ⚠ **读命令的循环绝不能被慢操作堵住**：
+    //   媒体命令要等 SMTC 回状态（没开音乐软件时 RequestAsync 会挂到 3 秒超时），
+    //   音量命令是纯 COM 调用（毫秒级）。
+    //   以前两类在同一个循环里串行处理，音量命令排在媒体命令后面就被堵住了；
+    //   更糟的是每条命令后都 await 一次 StateLineAsync()，
+    //   那个调用同样会挂 3 秒 —— 结果是**每条音量命令之间隔了 3 秒**。
+    //   实测拖动滑条时系统真值一直卡在第一次的值（80），界面却跟着乐观值走。
+    //
+    // 现在：音量命令在读循环里**就地处理**（快，不等任何人）；
+    //       媒体命令丢给另一条通道慢慢办，不占着读循环。
+    var mediaChannel = new SemaphoreSlim(1, 1);
+
     _ = Task.Run(async () =>
     {
         while (true)
@@ -382,7 +396,7 @@ static async Task WatchAsync()
             {
                 if (line.StartsWith("vol", StringComparison.Ordinal))
                 {
-                    // vol <0-100>：设系统主音量
+                    // vol <0-100>：设系统主音量（**就地处理，不等 SMTC**）
                     var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                     if (parts.Length >= 2 && int.TryParse(parts[1], out int percent))
                     {
@@ -391,26 +405,33 @@ static async Task WatchAsync()
                         if (after.HasValue) lastVolume = after.Value;
                         Console.WriteLine(J(new { kind = "ack", command = "vol", ok, value = after ?? percent, error = ok ? "" : Volume.LastError }));
                         Console.Out.Flush();
+                        // 只推音量行，不推媒体状态（那会拖慢这条通道）
+                        PushVolumeLine();
                     }
                     else
                     {
                         Console.WriteLine(J(new { kind = "ack", command = "vol", ok = false, value = 0, error = "用法: vol <0-100>" }));
                         Console.Out.Flush();
                     }
+                    continue; // 音量不等媒体状态刷新
                 }
-                else
+                // 媒体命令：另开一条通道办，不占着读循环
+                string cmd = line;
+                _ = Task.Run(async () =>
                 {
-                    await CommandAsync(line);
-                }
+                    await mediaChannel.WaitAsync();
+                    try
+                    {
+                        await CommandAsync(cmd);
+                        // 命令之后立刻推一次状态：界面不用等下一个轮询周期
+                        Console.WriteLine(J(await StateLineAsync()));
+                        Console.Out.Flush();
+                    }
+                    catch (Exception e) { Console.Error.WriteLine($"命令失败: {e.Message}"); }
+                    finally { mediaChannel.Release(); }
+                });
             }
             catch (Exception e) { Console.Error.WriteLine($"命令失败: {e.Message}"); }
-            // 命令之后立刻推一次状态：界面不用等下一个轮询周期
-            try
-            {
-                Console.WriteLine(J(await StateLineAsync()));
-                Console.Out.Flush();
-            }
-            catch (Exception e) { Console.Error.WriteLine($"状态刷新失败: {e.Message}"); }
         }
     });
 

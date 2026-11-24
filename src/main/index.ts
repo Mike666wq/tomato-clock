@@ -711,6 +711,12 @@ if (!app.requestSingleInstanceLock()) {
         if (!win || win.isDestroyed()) return null
         return win.getBounds()
       })
+      // 开发期：把岛横向挪开。
+      // 机器上同时跑着用户自己装的那份，两个岛会完全重叠 ——
+      // 真机鼠标分不清点的是哪个，还挡着用户那份。
+      ipcMain.on('island:dev-offset', (_e, dx: number) => {
+        island?.setDevOffsetX(Number(dx) || 0)
+      })
     }
 
     // 音乐控制（v0.2.2）：状态从 SMTC 子进程来，命令也是发给它

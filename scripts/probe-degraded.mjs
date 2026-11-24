@@ -47,6 +47,16 @@ await evaluate(`
 `)
 
 // 打开音乐控制（但**不伪造**任何媒体状态 —— 模拟"QQ 音乐没开"）
+//
+// ⚠ **先清掉开发期假状态**：别的验证脚本（measure-vol-real 等）会打一条假状态，
+//   而它**留在主进程里**（设计如此：不然音乐行每被清一次，滑条的 DOM 就重建一次，
+//   绑在上面的监听全丢）。不先清掉，这条"没有音乐会话"的断言就会读到残留的假状态。
+await evaluate(`
+  window.island.media.devFake(null)
+  true
+`)
+await sleep(300)
+
 await evaluate(`
   window.island.settings.save({ showMusicControl: true })
   window.island.island.setMode('expanded', true)

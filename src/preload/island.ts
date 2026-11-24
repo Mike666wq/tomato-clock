@@ -84,6 +84,10 @@ if (import.meta.env.DEV) {
     width: number
     height: number
   } | null> => ipcRenderer.invoke('island:dev-bounds')
+  // 开发期专用：把岛横向挪开（机器上同时跑着用户自己装的那份，两个岛会重叠）
+  ;(api.island as unknown as Record<string, unknown>)['devOffset'] = (dx: number): void => {
+    ipcRenderer.send('island:dev-offset', dx)
+  }
 }
 
 if (process.contextIsolated) {

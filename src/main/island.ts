@@ -35,6 +35,8 @@ export type IslandController = {
   isVisible(): boolean
   setMode(mode: IslandMode, music?: boolean): void
   getMode(): IslandMode
+  /** 开发期：横向挪开（避开用户自己那份的岛）。0 = 回到正中。 */
+  setDevOffsetX(dx: number): void
   destroy(): void
 }
 
@@ -62,11 +64,15 @@ function windowHeight(mode: IslandMode, music: boolean): number {
  *
  * 展开/收起时窗口宽度会变，居中位置也跟着变，所以每次改尺寸都要重新算一遍，
  * 不能靠加固定偏移量。
+ *
+ * `offsetX` 只在开发期用（`island:dev-offset`）：机器上同时跑着用户自己装的那份，
+ * 两个岛会**完全重叠**，真机鼠标分不清点的是哪个。把开发实例的岛横向挪开，
+ * 既不挡用户那份，也不让鼠标点错窗口。
  */
-function placeTopCenter(win: BrowserWindow): void {
+function placeTopCenter(win: BrowserWindow, offsetX = 0): void {
   const area = screen.getPrimaryDisplay().workArea
   const b = win.getBounds()
-  const x = Math.round(area.x + (area.width - b.width) / 2)
+  const x = Math.round(area.x + (area.width - b.width) / 2) + offsetX
   win.setPosition(x, area.y)
 }
 
@@ -74,6 +80,8 @@ export function createIsland(actions: IslandActions): IslandController {
   let mode: IslandMode = 'collapsed'
   let music = false
   let animTimer: NodeJS.Timeout | null = null
+  /** 开发期的横向偏移（DIP）；打包版里永远是 0 */
+  let devOffsetX = 0
 
   const win = new BrowserWindow({
     width: windowWidth(mode),
@@ -115,7 +123,7 @@ export function createIsland(actions: IslandActions): IslandController {
   })
 
   win.once('ready-to-show', () => {
-    placeTopCenter(win)
+    placeTopCenter(win, devOffsetX)
     win.show()
   })
 
@@ -178,7 +186,7 @@ export function createIsland(actions: IslandActions): IslandController {
         Math.round(startW + (targetW - startW) * e),
         Math.round(startH + (targetH - startH) * e)
       )
-      placeTopCenter(win)
+      placeTopCenter(win, devOffsetX)
       if (p >= 1) {
         if (animTimer) clearInterval(animTimer)
         animTimer = null
@@ -196,6 +204,10 @@ export function createIsland(actions: IslandActions): IslandController {
     isVisible: () => win.isVisible(),
     setMode,
     getMode: () => mode,
+    setDevOffsetX: (dx: number) => {
+      devOffsetX = Number.isFinite(dx) ? Math.round(dx) : 0
+      placeTopCenter(win, devOffsetX)
+    },
     destroy: () => {
       if (!win.isDestroyed()) win.destroy()
     }
