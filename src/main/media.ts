@@ -113,6 +113,18 @@ export function createMusicController(onChange: (state: MediaSnapshot | null) =>
   let volume: number | null = null
   let volumeOk = false
   /**
+   * **音频会话给的播放方向**（2026-11-24 加）。
+   *
+   * 跟音量一样**单独记一份**：没有会话时整个媒体状态可能被清掉，
+   * 但"在放还是在停"是系统级的事实，不该跟着会话一起丢。
+   */
+  let audioPlaying: boolean | null = null
+  /**
+   * 方向是峰值判的（实时）还是退回会话状态的（可能滞后几十秒）。
+   * 跟 audioPlaying 一样单独记一份。
+   */
+  let audioPeakKnownState = false
+  /**
    * 开发期的"假状态"（截图/测量时伪造一条正在放歌）。
    *
    * 有它的时候，helper 推来的**空 state 不该把界面清掉** ——
@@ -129,6 +141,8 @@ export function createMusicController(onChange: (state: MediaSnapshot | null) =>
       state.artist === next.artist &&
       state.playing === next.playing &&
       state.source === next.source &&
+      state.audioPlaying === next.audioPlaying &&
+      state.audioPeakKnown === next.audioPeakKnown &&
       state.volume === next.volume &&
       state.volumeOk === next.volumeOk &&
       state.pending === next.pending
@@ -257,6 +271,17 @@ export function createMusicController(onChange: (state: MediaSnapshot | null) =>
       const playing = Boolean(parsed['playing'])
       const volumeValue = Number(parsed['volume'] ?? 0)
       const volumeValueOk = Boolean(parsed['volumeOk'])
+      // ⚠ **音频会话给的播放方向**（2026-11-24 加）：
+      //   true=正在出声，false=暂停，null=不知道（helper 读不到）。
+      //   三种情况都要分清 —— 把"不知道"当成 false 就是**猜**，用户看得出来。
+      const audioRaw = parsed['audioPlaying']
+      const audioState: boolean | null =
+        audioRaw === null || audioRaw === undefined ? null : Boolean(audioRaw)
+      // 这个方向是峰值判的（实时）还是退回会话状态的（可能滞后几十秒）
+      const audioPeakKnown = Boolean(parsed['audioPeakKnown'])
+      // ⚠ 单独记一份（见上面 audioPlaying 的注释）：会话没了它也得留着
+      audioPlaying = audioState
+      audioPeakKnownState = audioPeakKnown
       volume = volumeValue
       volumeOk = volumeValueOk
       // 真实状态回来了 → 过渡态结束
@@ -275,13 +300,26 @@ export function createMusicController(onChange: (state: MediaSnapshot | null) =>
             artist: '',
             playing: false,
             hasSession: false,
+            audioPlaying: audioState,
+            audioPeakKnown,
             volume,
             volumeOk,
             pending: ''
           })
         }
       } else {
-        setState({ source, title, artist, playing, hasSession: true, volume, volumeOk, pending: '' })
+        setState({
+          source,
+          title,
+          artist,
+          playing,
+          hasSession: true,
+          audioPlaying: audioState,
+          audioPeakKnown,
+          volume,
+          volumeOk,
+          pending: ''
+        })
       }
       return
     }
@@ -311,6 +349,8 @@ export function createMusicController(onChange: (state: MediaSnapshot | null) =>
             artist: '',
             playing: false,
             hasSession: false,
+            audioPlaying: audioPlaying,
+            audioPeakKnown: audioPeakKnownState,
             volume: value,
             volumeOk: ok,
             pending: ''
@@ -447,6 +487,8 @@ export function createMusicController(onChange: (state: MediaSnapshot | null) =>
           artist: '',
           playing: false,
           hasSession: false,
+          audioPlaying: null,
+          audioPeakKnown: false,
           volume: volume ?? 0,
           volumeOk,
           pending: ''

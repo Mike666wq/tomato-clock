@@ -46,12 +46,16 @@ function currentSession() {
 /** 音乐软件在不在（QQ 音乐 / 其它常见播放器） */
 function musicAppRunning() {
   try {
+    // ⚠ **必须加 `exit 0`**：Get-Process 里写了不存在的进程名时，
+    //   即使有 -ErrorAction SilentlyContinue，**退出码也是 1** ——
+    //   execFileSync 见到非 0 就抛错，脚本于是误判成"一个音乐软件都没有"，
+    //   直接退出，测都测不了（2026-11-24 发现）。
     const out = execFileSync(
       'powershell',
       [
         '-NoProfile',
         '-Command',
-        "Get-Process QQMusic,Music,cloudmusic,Kugou -ErrorAction SilentlyContinue | Select-Object -ExpandProperty ProcessName | Sort-Object -Unique"
+        "Get-Process QQMusic,qmbrowser,Music,cloudmusic,Kugou -ErrorAction SilentlyContinue | Select-Object -ExpandProperty ProcessName | Sort-Object -Unique; exit 0"
       ],
       { encoding: 'utf-8', timeout: 10000 }
     )

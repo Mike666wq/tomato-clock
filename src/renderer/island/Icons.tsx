@@ -56,42 +56,80 @@ export function OpenIcon({ className, size = 14 }: IconProps): React.JSX.Element
 }
 
 /**
- * 播放/暂停（两态）图标。
+ * 播放/暂停按钮的图标（**一个** svg，三种形态）。
  *
- * 什么时候用：**读不到 SMTC 会话**的时候（2026-11-24 改）。
- * 那时不知道当前是在放还是在停 —— 显示哪一个都是猜，猜错了点下去就反了。
- * 所以显示一个"两态"图标：点一下发媒体键，Windows 自己判断该放还是该停。
+ * ⚠ **为什么三个图标要合并成一个组件**（2026-11-24 实测踩到）：
+ *   以前是三个独立组件（PlayIcon / PauseIcon / PlayPauseIcon），
+ *   状态一变就换成**另一个** `<svg>` 节点。
+ *   而这个按钮正好在**鼠标底下**被替换 ——
+ *   浏览器会把"光标下的元素被删掉"报成 mouseout，
+ *   岛于是以为鼠标移走了 → **400ms 后自己收起**。
+ *   实测：点一下暂停，岛当场塌掉（用户看着像"点了没反应"）。
+ *
+ *   现在：`<svg>` 永远是同一个节点，只换里面的 path/rect，
+ *   节点不被替换 → 不会触发 mouseout → 岛不塌。
+ *
+ * 三种形态：
+ *   'pause' = 两个竖条（正在放，点了会停）
+ *   'play'  = 一个三角（暂停中，点了会放）
+ *   'both'  = 一个三角 + 一个竖条（**方向不知道**，点了发切换命令）
  */
-export function PlayPauseIcon({ className, size = 14 }: IconProps): React.JSX.Element {
+export function PlayPauseGlyph({
+  className,
+  size = 16,
+  kind = 'both'
+}: IconProps & { kind?: 'pause' | 'play' | 'both' }): React.JSX.Element {
   return (
     <svg {...base(size)} className={className} aria-hidden>
-      <path d="M4.2 3.2 9.4 7 4.2 10.8Z" fill="currentColor" stroke="none" />
-      <rect x="9.4" y="3.2" width="1.7" height="7.6" rx="0.8" fill="currentColor" stroke="none" />
+      {kind === 'play' ? (
+        <path d="M4.6 3.2 10.6 7 4.6 10.8Z" fill="currentColor" stroke="none" />
+      ) : kind === 'pause' ? (
+        <>
+          <rect x="4.1" y="3" width="2" height="8" rx="0.9" fill="currentColor" stroke="none" />
+          <rect x="7.9" y="3" width="2" height="8" rx="0.9" fill="currentColor" stroke="none" />
+        </>
+      ) : (
+        <>
+          <path d="M4.2 3.2 9.4 7 4.2 10.8Z" fill="currentColor" stroke="none" />
+          <rect x="9.4" y="3.2" width="1.7" height="7.6" rx="0.8" fill="currentColor" stroke="none" />
+        </>
+      )}
     </svg>
   )
 }
 
-/** 上一首：两个三角形朝左 + 一条竖线 */
+/**
+ * 上一首（⏮）：**竖条在左** + 两个朝左的三角。
+ *
+ * ⚠ 2026-11-24 重画过：原来把竖条画在了右边，渲染出来是"◀◀|"，
+ *   那是**下一首**的镜像 —— 两个按钮的方向全是反的，用户一眼就看出来了。
+ *   标准形态：上一首 = |◀◀，下一首 = ▶▶|。
+ */
 export function PrevIcon({ className, size = 14 }: IconProps): React.JSX.Element {
   return (
     <svg {...base(size)} className={className} aria-hidden>
-      <path d="M10.2 3.4 4.6 7l5.6 3.6Z" fill="currentColor" stroke="none" />
-      <path d="M4 3.4 0.6 7 4 10.6Z" fill="currentColor" stroke="none" transform="translate(3.6 0)" />
-      <rect x="10.6" y="3.4" width="1.5" height="7.2" rx="0.7" fill="currentColor" stroke="none" />
+      <rect x="2" y="3" width="1.6" height="8" rx="0.7" fill="currentColor" stroke="none" />
+      <path d="M9.6 3.1 5.4 7l4.2 3.9Z" fill="currentColor" stroke="none" />
+      <path d="M13 3.1 8.8 7l4.2 3.9Z" fill="currentColor" stroke="none" />
     </svg>
   )
 }
 
-/** 下一首 */
+/**
+ * 下一首（⏭）：两个朝右的三角 + **竖条在右**。
+ *
+ * （上一首的镜像，竖条在右。见 PrevIcon 的注释。）
+ */
 export function NextIcon({ className, size = 14 }: IconProps): React.JSX.Element {
   return (
     <svg {...base(size)} className={className} aria-hidden>
-      <path d="M3.8 3.4 9.4 7l-5.6 3.6Z" fill="currentColor" stroke="none" />
-      <path d="M10 3.4 13.4 7 10 10.6Z" fill="currentColor" stroke="none" transform="translate(-3.6 0)" />
-      <rect x="1.9" y="3.4" width="1.5" height="7.2" rx="0.7" fill="currentColor" stroke="none" />
+      <path d="M1 3.1 4.8 7 1 10.9Z" fill="currentColor" stroke="none" />
+      <path d="M5.2 3.1 9 7l-3.8 3.9Z" fill="currentColor" stroke="none" />
+      <rect x="10.4" y="3" width="1.6" height="8" rx="0.7" fill="currentColor" stroke="none" />
     </svg>
   )
 }
+
 
 /**
  * 音量喇叭（系统总音量）。

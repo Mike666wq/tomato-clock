@@ -48,6 +48,9 @@ try
         case "vol":
             VolAsync(args);
             break;
+        case "audio":
+            AudioAsync();
+            break;
         default:
             Console.Error.WriteLine($"未知命令: {cmd}");
             return 1;
@@ -393,6 +396,12 @@ static async Task<Dictionary<string, object>> StateLineAsync()
     var s = manager?.GetCurrentSession();
     // 系统主音量：拿不到就是 null（界面据此隐藏音量入口，不显示假的 0）
     var volume = Volume.GetPercent();
+
+    // ⚠ **音频会话**：读不到 SMTC 会话时，播放方向靠它（不是靠猜）。
+    //   判据是**峰值**（这一刻真的有没有声音），不是会话的 Active 状态 ——
+    //   实测 Active 在暂停方向上要 23.5 秒才变（见 AudioSessions.PlayerState）。
+    var (audioPlaying, audioProcess, audioPeakKnown) = AudioSessions.PlayerState();
+
     if (s is null)
     {
         return new Dictionary<string, object>
@@ -402,6 +411,10 @@ static async Task<Dictionary<string, object>> StateLineAsync()
             ["title"] = "",
             ["artist"] = "",
             ["playing"] = false,
+            // 读不到 SMTC 会话，但**音频会话能告诉我们真实播放方向**
+            ["audioPlaying"] = audioPlaying,
+            ["audioPeakKnown"] = audioPeakKnown,
+            ["audioProcess"] = audioProcess,
             ["volume"] = volume ?? 0,
             ["volumeOk"] = volume.HasValue
         };
@@ -416,9 +429,52 @@ static async Task<Dictionary<string, object>> StateLineAsync()
         ["title"] = info.Title ?? "",
         ["artist"] = info.Artist ?? "",
         ["playing"] = playing,
+        ["audioPlaying"] = audioPlaying,
+        ["audioPeakKnown"] = audioPeakKnown,
+        ["audioProcess"] = audioProcess,
         ["volume"] = volume ?? 0,
         ["volumeOk"] = volume.HasValue
     };
+}
+
+/// <summary>
+/// 列出所有音频会话（调试用；也是「播放方向」判断的数据来源）。
+///
+/// 一次性命令：把每条会话的进程、状态都打出来，
+/// 这样"到底能不能读到 QQ 音乐的会话"是**看得见的事实**，不是猜的。
+/// </summary>
+static void AudioAsync()
+{
+    var sessions = AudioSessions.List();
+    foreach (var s in sessions)
+    {
+        Console.WriteLine(J(new
+        {
+            kind = "audioSession",
+            pid = s.ProcessId,
+            process = s.ProcessName,
+            state = s.State,
+            stateName = s.State switch
+            {
+                AudioSessions.StateActive => "active",
+                AudioSessions.StateInactive => "inactive",
+                _ => "other"
+            },
+            peak = s.Peak,
+            systemSounds = s.IsSystemSounds
+        }));
+    }
+    var (playing, name, peakKnown) = AudioSessions.PlayerState();
+    Console.WriteLine(J(new
+    {
+        kind = "audioPlayer",
+        playing = playing,
+        process = name,
+        peakKnown,
+        count = sessions.Count,
+        error = AudioSessions.LastError
+    }));
+    Console.Out.Flush();
 }
 
 /// <summary>

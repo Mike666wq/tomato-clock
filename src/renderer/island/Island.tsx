@@ -19,12 +19,13 @@ import {
   OpenIcon,
   PauseIcon,
   PlayIcon,
-  PlayPauseIcon,
+  PlayPauseGlyph,
   PrevIcon,
   SkipIcon,
   VolumeIcon
 } from './Icons'
 import VolumeSlider from './VolumeSlider'
+import { mediaCommandFor, playPauseIconFor, playingDirection } from '../../shared/media-direction'
 
 /** 悬停多久展开 */
 const HOVER_OPEN_MS = 120
@@ -266,6 +267,22 @@ export default function Island(): React.JSX.Element {
   const isFocus = (state?.phase ?? 'focus') === 'focus'
   const running = state?.running ?? false
   const percent = state && state.totalSec > 0 ? Math.min(100, (state.activeSec / state.totalSec) * 100) : 0
+
+  /**
+   * **真实的播放方向**（2026-11-24 加，v0.3.7）。
+   *
+   * null = 不知道（这时候界面显示两态图标，点了发切换命令 —— 不猜方向）。
+   *
+   * 判定逻辑在 shared/media-direction.ts（**有单测**）：
+   *   1. 读得到 SMTC 会话 → 以 SMTC 的 playing 为准（它连歌名都有，最权威）
+   *   2. 读不到 → 用**音频会话**的状态（那个进程有没有真的在出声）
+   *   3. 都读不到 → null
+   *
+   * ⚠ 为什么必须有第 2 条：QQ 音乐新版内核不向 Windows 报告 SMTC 会话，
+   *   于是"在放还是在停"完全读不到 —— 界面以前只能猜一个方向，
+   *   用户一看就知道图标不对。
+   */
+  const realPlaying = playingDirection(media)
 
   const activePreset = (settings?.presets ?? []).find((p) => p.id === settings?.activePresetId)
 
@@ -524,31 +541,41 @@ export default function Island(): React.JSX.Element {
             </button>
             {/*
              * 播放/暂停按钮：
-             *   - 读得到会话 → 显示播放或暂停（按真实状态）
-             *   - **读不到会话 → 显示"播放/暂停"两态图标**，
-             *     点一下发媒体键（play/pause 同一个键，Windows 自己判断当前状态）。
-             *     不用猜"现在是在放还是在停" —— 猜错了点下去就反了。
+             *   图标方向按**真实状态**画，不猜。
+             *
+             *   真实状态从哪来（v0.3.7）：
+             *     1. 读得到 SMTC 会话 → 以 SMTC 的 playing 为准
+             *     2. 读不到会话 → 用**音频会话**的状态
+             *        （那个进程有没有真的在出声：Active=在放，Inactive=暂停）
+             *     3. 两个都读不到 → **不知道**（audioPlaying === null），
+             *        显示两态图标，点了发**切换**命令（媒体键本来就是切换语义）
+             *
+             *   ⚠ 以前这里是"读不到会话就显示 ▶|" —— 那形状跟"下一首"几乎一样，
+             *     用户一眼就看出图标不对（"图标以及暂定播放标志不对"）。
+             *     现在方向是真的，形状也重画过（⏮ |◀◀ / ▶▶| ⏭）。
              */}
             <button
               className="island__music-btn"
               onClick={(e) => {
                 e.stopPropagation()
-                // 读得到会话 → 按真实状态发 play/pause；
-                // 读不到 → 发 toggle（切换），让 Windows 自己判断
-                window.island?.media.command(
-                  media?.hasSession ? (media.playing ? 'pause' : 'play') : 'toggle'
-                )
+                // 有真实状态 → 按真实状态发 play / pause；
+                // 不知道 → 发 toggle（切换），让 Windows 自己判断
+                window.island?.media.command(mediaCommandFor(realPlaying))
               }}
-              aria-label={media?.hasSession ? (media.playing ? '暂停' : '播放') : '播放/暂停'}
+              aria-label={
+                realPlaying === null ? '播放/暂停' : realPlaying ? '暂停' : '播放'
+              }
               // 过渡态：**等真实状态回流**才换图标（以前是乐观更新，
               // 看着像点动了其实音乐没停）
               data-pending={media?.pending ? '1' : undefined}
             >
-              {media?.hasSession ? (
-                media.playing ? <PauseIcon size={16} /> : <PlayIcon size={16} />
-              ) : (
-                <PlayPauseIcon size={16} />
-              )}
+              {/*
+               * ⚠ 用**合并图标**（PlayPauseGlyph），不是三个独立组件：
+               *   独立组件会在状态变化时换掉整个 `<svg>` 节点 ——
+               *   而这个按钮就在鼠标底下，节点被删会让浏览器报 mouseout，
+               *   岛于是自己收起（实测：点一下暂停，岛当场塌掉）。
+               */}
+              <PlayPauseGlyph size={16} kind={playPauseIconFor(realPlaying)} />
             </button>
             <button
               className="island__music-btn"
