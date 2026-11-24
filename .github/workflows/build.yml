@@ -150,6 +150,8 @@ jobs:
           files: |
             release/upload/*.exe
             release/upload/*.zip
-          generate_release_notes: true
+          # 发布说明用 docs/发布说明-<版本>.md（手写的，讲清楚"这一版解决什么"）；
+          # 没有这个文件才退回自动生成的提交列表。
+          body_path: docs/发布说明-${{ github.ref_name }}.md
           # 附件对不上就失败，别留一个空 Release 骗人
           fail_on_unmatched_files: true
