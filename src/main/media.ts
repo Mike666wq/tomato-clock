@@ -254,6 +254,7 @@ export function createMusicController(onChange: (state: MediaSnapshot | null) =>
     if (kind === 'ack') {
       const cmd = String(parsed['command'] ?? '')
       const ok = Boolean(parsed['ok'])
+      const changed = Boolean(parsed['changed'])
       if (cmd === 'vol') {
         // 音量命令的回执：音量值由 kind=volume 那条带
         return
@@ -262,6 +263,18 @@ export function createMusicController(onChange: (state: MediaSnapshot | null) =>
       if (!ok) {
         // 命令**没生效**（helper 试过了，SMTC 和媒体键都没能让它动）
         // → 直接恢复原样，不假装点过了
+        clearPending()
+        setState({ ...state, pending: '' })
+        return
+      }
+      if (!changed) {
+        // ⚠ **命令发出去了，但没法确认有没有生效**（读不到 SMTC 状态时就是这个情况）。
+        //   这时**不进过渡态**：进了就会让界面显示"正在暂停…"，
+        //   然后 400ms 后弹回来 —— 看着像"点了没反应"。
+        //   保持原样更诚实：用户看到的是"图标没变"，
+        //   而不是"闪了一下又变回去"。
+        //   （2026-11-24 中午：SMTC 读会话这条路在这台机器上是死的，
+        //     命令只能靠全局媒体键发出去，效果无法验证。）
         clearPending()
         setState({ ...state, pending: '' })
         return

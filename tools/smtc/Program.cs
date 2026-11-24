@@ -18,7 +18,6 @@ using SmtcTool;
 
 using System.Text.Json;
 using Windows.Media.Control;
-
 // ⚠ **输出编码必须是 UTF-8**：Windows 上 .NET 的控制台默认按 GBK 输出，
 //   而主进程那边是按 UTF-8 读的 → helper 报的中文全是乱码
 //   （实测日志里是 `smtc: ��ѯʧ��:`），媒体相关的错根本读不懂。
@@ -63,9 +62,69 @@ return 0;
 
 static string J(object o) => JsonSerializer.Serialize(o);
 
-static async Task<GlobalSystemMediaTransportControlsSessionManager> ManagerAsync()
+static async Task<GlobalSystemMediaTransportControlsSessionManager?> ManagerAsync(int timeoutMs = 3000)
 {
-    return await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
+    // ⚠ **超时必须套在「整个读取任务」外面，不能用 op.AsTask()**：
+    //   RequestAsync() 返回的是 WinRT 的 IAsyncOperation。
+    //   `await` 它走的是 WinRT 自己的调度（能正常完成）；
+    //   而 `op.AsTask()` 把它转成普通 Task 后，在这台机器上**一直不返回** ——
+    //   实测改用 AsTask() 后 `smtc current` 每次都撞满 10 秒超时、
+    //   且一条会话都读不到（当时 QQ 音乐明明在放、歌名还在变）。
+    //   这是 2026-11-24 中午踩的坑，别再改回 AsTask()。
+    //
+    // 超时套在哪：ReadManagerAsync() 里**直接 await RequestAsync()**
+    //（跟 2026-11-23 晚上那版一模一样，那版能正常读到会话），
+    // 外层用 WithTimeout 跟一个延时赛跑，迟了就当"没有会话"。
+    var work = ReadManagerAsync();
+    return await WithTimeout<GlobalSystemMediaTransportControlsSessionManager?>(work, timeoutMs, null);
+}
+
+/// <summary>
+/// 读取会话管理器。
+///
+/// ⚠ 这里**必须直接 `await RequestAsync()`**（WinRT 的 IAsyncOperation 自带 awaiter），
+///   不要改成 `op.AsTask()` —— 见 ManagerAsync 的注释。
+///
+/// ⚠⚠ **必须在 STA 线程上调用**：控制台程序默认是 **MTA**，
+///   而 `GlobalSystemMediaTransportControlsSessionManager.RequestAsync()`
+///   在 MTA 线程上**会一直不返回**（实测：每次都撞满超时，一条会话都读不到，
+///   当时 QQ 音乐明明在放、歌名还在变）。
+///   把这段放到一个专门的 STA 线程上跑就正常了。
+/// </summary>
+static async Task<GlobalSystemMediaTransportControlsSessionManager?> ReadManagerAsync()
+{
+    return await RunOnStaThread(async () =>
+        await GlobalSystemMediaTransportControlsSessionManager.RequestAsync());
+}
+
+/// <summary>
+/// 在一个**专用 STA 线程**上跑一段异步工作，把结果拿回来。
+///
+/// 为什么需要：WinRT 的很多 API 在 MTA 线程上会挂死（见 ReadManagerAsync 的注释）。
+///
+/// ⚠ 注意里面是 `work().GetAwaiter().GetResult()` —— 这是**阻塞** STA 线程等结果。
+///   WinRT 的 awaiter 会把续体投回线程池（没有 SynchronizationContext 时），
+///   所以不会自锁；真正的 COM 调用是在这个 STA 线程上发起的，那才是关键。
+/// </summary>
+static Task<T> RunOnStaThread<T>(Func<Task<T>> work)
+{
+    var tcs = new TaskCompletionSource<T>();
+    var thread = new Thread(() =>
+    {
+        try
+        {
+            var result = work().GetAwaiter().GetResult();
+            tcs.TrySetResult(result);
+        }
+        catch (Exception e)
+        {
+            tcs.TrySetException(e);
+        }
+    });
+    thread.SetApartmentState(ApartmentState.STA);
+    thread.IsBackground = true;
+    thread.Start();
+    return tcs.Task;
 }
 
 /// <summary>
@@ -103,10 +162,11 @@ static async Task FillAsync(GlobalSystemMediaTransportControlsSession s, Session
     }
 }
 
-static async Task<List<SessionInfo>> SessionsAsync()
+static async Task<List<SessionInfo>> SessionsAsync(int timeoutMs)
 {
-    var manager = await ManagerAsync();
+    var manager = await ManagerAsync(timeoutMs);
     var list = new List<SessionInfo>();
+    if (manager is null) return list;
     foreach (var s in manager.GetSessions())
     {
         var info = new SessionInfo { SourceAppId = s.SourceAppUserModelId };
@@ -118,7 +178,10 @@ static async Task<List<SessionInfo>> SessionsAsync()
 
 static async Task ListAsync()
 {
-    var sessions = await SessionsAsync();
+    // 一次性命令给**更长的超时**（10 秒）：它不是常驻循环，等得起。
+    // 区分两种"空"：真的没有会话 vs 拿会话管理器超时了 ——
+    // 后者要写进输出，否则看起来跟"没装音乐软件"一样。
+    var sessions = await SessionsAsync(10000);
     Console.WriteLine(J(sessions));
     foreach (var s in sessions)
     {
@@ -129,8 +192,8 @@ static async Task ListAsync()
 
 static async Task CurrentAsync()
 {
-    var manager = await ManagerAsync();
-    var s = manager.GetCurrentSession();
+    var manager = await ManagerAsync(10000);
+    var s = manager?.GetCurrentSession();
     if (s is null)
     {
         Console.WriteLine(J(new SessionInfo { Error = "没有当前会话" }));
@@ -162,12 +225,41 @@ static async Task<(bool playing, string title)> ReadPlayingAsync(GlobalSystemMed
 /// </summary>
 static async Task<bool> CommandAsync(string cmd)
 {
-    var manager = await WithTimeout(ManagerAsync(), 3000, null);
+    var manager = await ManagerAsync(); // ManagerAsync 内部已有 3 秒超时
     var s = manager?.GetCurrentSession();
+
+    // ⚠⚠ **没有 SMTC 会话时，也要发媒体键** —— 这不是"放弃"，是唯一的路。
+    //
+    // 背景（2026-11-24 中午实测）：这台机器上 `RequestAsync()` **一直不返回**
+    // （每次都撞满超时），所以**永远拿不到会话**。
+    // 而媒体键是**全局**的（Windows 直接发给当前媒体会话，不经过 SMTC 查询）——
+    // 肥鱼 2026-11-23 深夜实测过：媒体键能控制 QQ 音乐。
+    //
+    // 以前这里是 `if (s is null) return false;` —— 直接放弃，
+    // 于是"先 SMTC、600ms 没动静就补发媒体键"这条策略在
+    // **读不到会话的机器上永远走不到回退那一步**，
+    // 音乐控制在这些机器上等于完全失效（点了没反应，也不报错）。
+    //
+    // ⚠ **changed 必须是 false**：读不到状态就**无法验证**命令有没有生效。
+    //   谎报 true 会让主进程把界面切成"已生效"，然后 400ms 后又弹回去 ——
+    //   那就是"看起来动了其实没动"，正是这个功能最初被投诉的现象。
+    //   诚实的做法：changed=false，界面保持原样；
+    //   主进程那边 pending 超时后会恢复原状，不会骗用户。
     if (s is null)
     {
-        Console.WriteLine(J(new { kind = "ack", command = cmd, ok = false, via = "none", error = "没有当前会话" }));
-        return false;
+        bool sent = SendMediaKeyOnly(cmd);
+        Console.WriteLine(J(new
+        {
+            kind = "ack",
+            command = cmd,
+            ok = sent,
+            via = sent ? "mediaKey" : "none",
+            changed = false,
+            error = sent
+                ? "读不到 SMTC 会话，已发全局媒体键，但无法验证是否生效"
+                : "没有当前会话，且这个命令没有对应的媒体键"
+        }));
+        return sent;
     }
 
     var before = await ReadPlayingAsync(s);
@@ -209,16 +301,8 @@ static async Task<bool> CommandAsync(string cmd)
     if (!changed && ok)
     {
         // SMTC 没效果（QQ 音乐只肯读不肯收）→ 补发全局媒体键
-        ushort vk = cmd switch
+        if (SendMediaKeyOnly(cmd))
         {
-            "play" or "pause" => MediaKeys.VkMediaPlayPause,
-            "next" => MediaKeys.VkMediaNext,
-            "prev" => MediaKeys.VkMediaPrev,
-            _ => (ushort)0
-        };
-        if (vk != 0)
-        {
-            MediaKeys.Send(vk);
             via = "mediaKey";
             await Task.Delay(350);
             var final = await ReadPlayingAsync(s);
@@ -242,11 +326,35 @@ static async Task<bool> CommandAsync(string cmd)
     return ok && changed;
 }
 
+/// <summary>
+/// 只走媒体键通道发一条命令。
+///
+/// 什么时候用：
+///   1. SMTC 命令发了但状态没变（QQ 音乐只肯读、不肯收）；
+///   2. **压根读不到 SMTC 会话** —— 这台机器上 RequestAsync 一直不返回，
+///      而媒体键是全局的，不需要会话也能发（实测能控制 QQ 音乐）。
+///
+/// 返回 false = 这个命令没有对应的媒体键（未知命令）。
+/// </summary>
+static bool SendMediaKeyOnly(string cmd)
+{
+    ushort vk = cmd switch
+    {
+        "play" or "pause" => MediaKeys.VkMediaPlayPause,
+        "next" => MediaKeys.VkMediaNext,
+        "prev" => MediaKeys.VkMediaPrev,
+        _ => (ushort)0
+    };
+    if (vk == 0) return false;
+    MediaKeys.Send(vk);
+    return true;
+}
+
 /// 当前会话的一行状态。没有会话 / 没开音乐软件时给空标题，
 /// 主进程据此把灵动岛上的那一行整个藏掉（不是留个空行）。
 static async Task<object> StateLineAsync()
 {
-    var manager = await WithTimeout(ManagerAsync(), 3000, null);
+    var manager = await ManagerAsync(); // ManagerAsync 内部已有 3 秒超时
     var s = manager?.GetCurrentSession();
     // 系统主音量：拿不到就是 null（界面据此隐藏音量入口，不显示假的 0）
     var volume = Volume.GetPercent();
