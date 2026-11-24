@@ -164,6 +164,107 @@ check(
   `media=${JSON.stringify(v.media)}`
 )
 
+// ---------- 0.3.7 新增：图标形状 + 方向 ----------
+//
+// 这两条是这版的核心，**打包版也要验**（构建过程可能改坏东西）。
+const iconShapes = await evaluate(`(() => {
+  const svgOf = (label) => {
+    const el = [...document.querySelectorAll('.island__music-btn')].find((x) => x.getAttribute('aria-label') === label)
+    if (!el) return null
+    const svg = el.querySelector('svg')
+    if (!svg) return null
+    return {
+      paths: [...svg.querySelectorAll('path')].map((p) => p.getAttribute('d')),
+      rects: [...svg.querySelectorAll('rect')].map((r) => ({
+        x: Number(r.getAttribute('x')), y: Number(r.getAttribute('y')),
+        w: Number(r.getAttribute('width')), h: Number(r.getAttribute('height'))
+      }))
+    }
+  }
+  const pp = [...document.querySelectorAll('.island__music-btn')].find((x) => {
+    const l = x.getAttribute('aria-label') || ''
+    return l === '播放' || l === '暂停' || l === '播放/暂停'
+  })
+  const ppSvg = pp ? pp.querySelector('svg') : null
+  return {
+    prev: svgOf('上一首'),
+    next: svgOf('下一首'),
+    playPause: pp ? {
+      label: pp.getAttribute('aria-label'),
+      paths: [...ppSvg.querySelectorAll('path')].map((p) => p.getAttribute('d')),
+      rects: [...ppSvg.querySelectorAll('rect')].map((r) => ({
+        x: Number(r.getAttribute('x')), y: Number(r.getAttribute('y')),
+        w: Number(r.getAttribute('width')), h: Number(r.getAttribute('height'))
+      }))
+    } : null
+  }
+})()`)
+console.log(`  [诊断] 图标几何：${JSON.stringify(iconShapes)}`)
+
+check(
+  '打包版：「上一首」竖条在左 + 两个朝左的三角（|◀◀）',
+  iconShapes.prev !== null &&
+    iconShapes.prev.rects.length === 1 &&
+    iconShapes.prev.rects[0].x === Math.min(...iconShapes.prev.rects.map((r) => r.x)) &&
+    iconShapes.prev.paths.length === 2 &&
+    iconShapes.prev.paths.every((d) => {
+      const nums = (d.match(/-?\d+(\.\d+)?/g) || []).map(Number)
+      return nums[0] > nums[2]
+    }),
+  `rects=${JSON.stringify(iconShapes.prev?.rects)} paths=${JSON.stringify(iconShapes.prev?.paths)}`
+)
+check(
+  '打包版：「下一首」两个朝右的三角 + 竖条在右（▶▶|）',
+  iconShapes.next !== null &&
+    iconShapes.next.rects.length === 1 &&
+    iconShapes.next.rects[0].x === Math.max(...iconShapes.next.rects.map((r) => r.x)) &&
+    iconShapes.next.paths.length === 2 &&
+    iconShapes.next.paths.every((d) => {
+      const nums = (d.match(/-?\d+(\.\d+)?/g) || []).map(Number)
+      return nums[0] < nums[2]
+    }),
+  `rects=${JSON.stringify(iconShapes.next?.rects)} paths=${JSON.stringify(iconShapes.next?.paths)}`
+)
+check(
+  '打包版：播放/暂停图标是**合并的一个 svg**（状态一变不会塌岛）',
+  iconShapes.playPause !== null,
+  `label=${iconShapes.playPause?.label}`
+)
+
+// 方向：独立进程读音频会话的峰值当真相源
+const { execFileSync } = await import('node:child_process')
+const path = await import('node:path')
+let realPlaying = null
+let realPeak = null
+try {
+  const out = execFileSync(
+    path.join(process.cwd(), 'tools', 'smtc', 'publish', 'smtc.exe'),
+    ['audio'],
+    { encoding: 'utf-8', timeout: 15000 }
+  )
+  for (const line of out.trim().split('\n').filter(Boolean).reverse()) {
+    const parsed = JSON.parse(line)
+    if (parsed.kind === 'audioSession' && parsed.peak !== null && parsed.peak !== undefined) {
+      realPeak = Number(parsed.peak)
+    }
+    if (parsed.kind === 'audioPlayer') realPlaying = parsed.playing === null ? null : Boolean(parsed.playing)
+  }
+} catch {
+  /* 读不到就跳过方向断言 */
+}
+console.log(`  [诊断] 独立进程读到的真实方向：playing=${realPlaying} peak=${realPeak}`)
+if (realPlaying !== null) {
+  const expectLabel = realPlaying ? '暂停' : '播放'
+  check(
+    `打包版：方向跟真实声音一致（真实在放=${realPlaying} → 显示「${expectLabel}」）`,
+    iconShapes.playPause?.label === expectLabel,
+    `label=${iconShapes.playPause?.label} 期望=${expectLabel} peak=${realPeak}`
+  )
+} else {
+  check('打包版：读不到真实方向 → 显示两态图标（不猜）', iconShapes.playPause?.label === '播放/暂停',
+    `label=${iconShapes.playPause?.label}`)
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n# 汇总：${results.length} 项，通过 ${results.length - failed.length}，失败 ${failed.length}`)
 ps.kill()

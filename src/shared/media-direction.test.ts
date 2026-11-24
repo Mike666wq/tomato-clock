@@ -20,6 +20,7 @@ function snap(over: Partial<MediaSnapshot> = {}): MediaSnapshot {
     artist: '',
     playing: false,
     hasSession: false,
+    titleSource: '',
     audioPlaying: null,
     audioPeakKnown: false,
     volume: 25,
@@ -30,27 +31,39 @@ function snap(over: Partial<MediaSnapshot> = {}): MediaSnapshot {
 }
 
 describe('真实播放方向', () => {
-  it('读得到 SMTC 会话时，以 SMTC 的 playing 为准', () => {
-    expect(playingDirection(snap({ hasSession: true, playing: true }))).toBe(true)
-    expect(playingDirection(snap({ hasSession: true, playing: false }))).toBe(false)
+  it('歌名来自 SMTC 时，以 SMTC 的 playing 为准', () => {
+    expect(
+      playingDirection(snap({ hasSession: true, titleSource: 'smtc', playing: true }))
+    ).toBe(true)
+    expect(
+      playingDirection(snap({ hasSession: true, titleSource: 'smtc', playing: false }))
+    ).toBe(false)
   })
 
-  it('读不到会话时，用音频会话的状态', () => {
-    expect(playingDirection(snap({ hasSession: false, audioPlaying: true }))).toBe(true)
-    expect(playingDirection(snap({ hasSession: false, audioPlaying: false }))).toBe(false)
+  it('歌名来自窗口标题时，用音频会话的方向', () => {
+    // ⚠ 这条是最容易搞错的一条：歌名有了（hasSession=true），
+    //   但 SMTC 的 playing 是空的 —— 拿它当方向会**永远是暂停**。
+    expect(
+      playingDirection(snap({ hasSession: true, titleSource: 'window', playing: false, audioPlaying: true }))
+    ).toBe(true)
+    expect(
+      playingDirection(snap({ hasSession: true, titleSource: 'window', playing: false, audioPlaying: false }))
+    ).toBe(false)
   })
 
   it('SMTC 与音频会话都有时，SMTC 优先', () => {
     // SMTC 说在放、音频会话说暂停 → 以 SMTC 为准（它同时给得出歌名，最权威）
-    expect(playingDirection(snap({ hasSession: true, playing: true, audioPlaying: false }))).toBe(
-      true
-    )
+    expect(
+      playingDirection(
+        snap({ hasSession: true, titleSource: 'smtc', playing: true, audioPlaying: false })
+      )
+    ).toBe(true)
   })
 
   it('两个都读不到时是"不知道"，不是"暂停"', () => {
     // ⚠ 这条是最关键的一条：把"不知道"当成 false 就是猜，
     //   界面上就会永远显示一个猜的方向 —— 用户看得出来。
-    expect(playingDirection(snap({ hasSession: false, audioPlaying: null }))).toBeNull()
+    expect(playingDirection(snap({ hasSession: false, titleSource: '', audioPlaying: null }))).toBeNull()
     expect(playingDirection(null)).toBeNull()
   })
 })
@@ -78,26 +91,30 @@ describe('按方向画哪个图标', () => {
 })
 
 describe('这个方向可不可信（会不会滞后）', () => {
-  it('SMTC 会话在 → 实时', () => {
-    expect(directionIsLive(snap({ hasSession: true, playing: true }))).toBe(true)
+  it('歌名来自 SMTC → 实时', () => {
+    expect(directionIsLive(snap({ hasSession: true, titleSource: 'smtc', playing: true }))).toBe(true)
   })
 
   it('音频会话 + 峰值 → 实时', () => {
     // 实测峰值 1~2 秒内就反转
-    expect(directionIsLive(snap({ hasSession: false, audioPlaying: true, audioPeakKnown: true }))).toBe(
-      true
-    )
+    expect(
+      directionIsLive(
+        snap({ hasSession: false, titleSource: 'window', audioPlaying: true, audioPeakKnown: true })
+      )
+    ).toBe(true)
   })
 
   it('音频会话但没峰值（退回会话状态）→ 可能滞后', () => {
     // 实测暂停方向滞后 23.5 秒 —— 这时不能立刻判"命令没生效"
     expect(
-      directionIsLive(snap({ hasSession: false, audioPlaying: false, audioPeakKnown: false }))
+      directionIsLive(
+        snap({ hasSession: false, titleSource: 'window', audioPlaying: false, audioPeakKnown: false })
+      )
     ).toBe(false)
   })
 
   it('根本不知道方向 → null', () => {
-    expect(directionIsLive(snap({ hasSession: false, audioPlaying: null }))).toBeNull()
+    expect(directionIsLive(snap({ hasSession: false, titleSource: '', audioPlaying: null }))).toBeNull()
     expect(directionIsLive(null)).toBeNull()
   })
 })

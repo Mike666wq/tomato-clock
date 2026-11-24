@@ -402,36 +402,53 @@ static async Task<Dictionary<string, object>> StateLineAsync()
     //   实测 Active 在暂停方向上要 23.5 秒才变（见 AudioSessions.PlayerState）。
     var (audioPlaying, audioProcess, audioPeakKnown) = AudioSessions.PlayerState();
 
-    if (s is null)
+    // ⚠ **歌名兜底**：SMTC 读不到会话时，退到"音乐播放器主窗口的标题"。
+    //   QQ 音乐这一版不再向系统报告会话，但它的主窗口标题就是「歌名 - 歌手」
+    //   （实测切歌立刻跟着变）。
+    //   只在 SMTC 没给出歌名时才用 —— 有官方接口就优先用官方的。
+    string title = "";
+    string artist = "";
+    string source = "";
+    bool playing = false;
+
+    if (s is not null)
     {
-        return new Dictionary<string, object>
-        {
-            ["kind"] = "state",
-            ["source"] = "",
-            ["title"] = "",
-            ["artist"] = "",
-            ["playing"] = false,
-            // 读不到 SMTC 会话，但**音频会话能告诉我们真实播放方向**
-            ["audioPlaying"] = audioPlaying,
-            ["audioPeakKnown"] = audioPeakKnown,
-            ["audioProcess"] = audioProcess,
-            ["volume"] = volume ?? 0,
-            ["volumeOk"] = volume.HasValue
-        };
+        var info = new SessionInfo { SourceAppId = s.SourceAppUserModelId };
+        await FillAsync(s, info);
+        source = info.SourceAppId ?? "";
+        title = info.Title ?? "";
+        artist = info.Artist ?? "";
+        playing = string.Equals(info.PlaybackState, "Playing", StringComparison.OrdinalIgnoreCase);
     }
-    var info = new SessionInfo { SourceAppId = s.SourceAppUserModelId };
-    await FillAsync(s, info);
-    var playing = string.Equals(info.PlaybackState, "Playing", StringComparison.OrdinalIgnoreCase);
+    else
+    {
+        var song = WindowTitles.SongTitle();
+        if (song.HasValue)
+        {
+            title = song.Value.title;
+            artist = song.Value.artist;
+            source = "window-title";
+            // ⚠ **窗口标题这条路拿不到播放状态**（SMTC 读不到），
+            //   但音频会话知道 → 用它填 playing，别留一个假的 false。
+            playing = audioPlaying ?? false;
+        }
+    }
+
     return new Dictionary<string, object>
     {
         ["kind"] = "state",
-        ["source"] = info.SourceAppId ?? "",
-        ["title"] = info.Title ?? "",
-        ["artist"] = info.Artist ?? "",
+        ["source"] = source,
+        ["title"] = title,
+        ["artist"] = artist,
         ["playing"] = playing,
+        // 读不到 SMTC 会话时，**音频会话能告诉我们真实播放方向**
         ["audioPlaying"] = audioPlaying,
         ["audioPeakKnown"] = audioPeakKnown,
         ["audioProcess"] = audioProcess,
+        // 歌名是从哪来的：'smtc' | 'window' | ''
+        // ⚠ **值必须和主进程认的一致**（曾两边一个写 "window-title"、一个认 "window"，
+        //   结果这一栏永远是空的 —— 方向逻辑因此走错分支）。
+        ["titleSource"] = s is not null ? "smtc" : (title.Length > 0 ? "window" : ""),
         ["volume"] = volume ?? 0,
         ["volumeOk"] = volume.HasValue
     };

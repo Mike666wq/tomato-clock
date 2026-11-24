@@ -26,19 +26,25 @@ export type PlayingDirection = boolean | null
  * 从媒体快照算"真实播放方向"。
  *
  * 优先级（**不能改**）：
- *   1. 读得到 SMTC 会话 → 以 SMTC 的 `playing` 为准。
+ *   1. 歌名来自 **SMTC** → 以 SMTC 的 `playing` 为准。
  *      理由：SMTC 是唯一能同时给出歌名和播放状态的源，它在的时候它最权威。
- *   2. 读不到会话 → 用**音频会话**的状态（`audioPlaying`）。
- *      理由：那个进程有没有在出声，是系统的事实，比"猜"强。
- *   3. 两者都读不到 → `null` = 不知道。
+ *   2. 歌名来自**窗口标题**（SMTC 读不到时的兜底）→ 用**音频会话**的 `audioPlaying`。
+ *      理由：那种情况下 SMTC 的 playing 根本没读出来（是空的），
+ *      拿它当方向会**永远是"暂停"** —— 那是错的。
+ *   3. 都读不到 → `null` = 不知道。
  *
- * ⚠ **第 3 条是关键**：以前这里把"读不到"当成"暂停"（false），
+ * ⚠ **第 2 条是关键**（2026-11-24 实测踩到）：
+ *   以前这里只看"有没有会话"，而窗口标题兜底也会让 hasSession 变 true
+ *   —— 于是方向去读了 SMTC 的 playing（空的 → false），
+ *   界面永远显示"暂停"。歌名有了、方向却错了。
+ *
+ * ⚠ **第 3 条也是关键**：以前把"读不到"当成"暂停"（false），
  *   界面上就永远显示一个**猜的**方向 —— 用户看到的就是"图标不对"。
  *   现在不知道就说不知道，界面显示两态图标，点了发切换命令。
  */
 export function playingDirection(media: MediaSnapshot | null): PlayingDirection {
   if (!media) return null
-  if (media.hasSession) return media.playing
+  if (media.titleSource === 'smtc') return media.playing
   return media.audioPlaying
 }
 
@@ -56,8 +62,8 @@ export function directionIsLive(media: MediaSnapshot | null): boolean | null {
   if (!media) return null
   const direction = playingDirection(media)
   if (direction === null) return null
-  // 读得到 SMTC 会话 → SMTC 的状态是实时的
-  if (media.hasSession) return true
+  // 歌名来自 SMTC → SMTC 的状态是实时的
+  if (media.titleSource === 'smtc') return true
   return media.audioPeakKnown
 }
 

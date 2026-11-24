@@ -143,6 +143,7 @@ export function createMusicController(onChange: (state: MediaSnapshot | null) =>
       state.source === next.source &&
       state.audioPlaying === next.audioPlaying &&
       state.audioPeakKnown === next.audioPeakKnown &&
+      state.titleSource === next.titleSource &&
       state.volume === next.volume &&
       state.volumeOk === next.volumeOk &&
       state.pending === next.pending
@@ -290,6 +291,21 @@ export function createMusicController(onChange: (state: MediaSnapshot | null) =>
       //   没有会话时照样要把状态发出去 —— 因为**音量是系统级的**，
       //   跟有没有会话无关（不发的��，界面就拿不到 volumeOk → 音量入口被隐藏）。
       const hasSession = title !== '' || artist !== ''
+      // 歌名从哪来的：'smtc' | 'window' | ''
+      // ⚠ **必须单独记**：歌名从窗口标题来的时候，SMTC 的 playing 是空的，
+      //   方向要改用音频会话的（见 media-direction.ts 的 playingDirection）。
+      //
+      // ⚠ 这里**两种写法都认**（'window' 和 'window-title'）：
+      //   曾两边不一致（helper 发 "window-title"、这边认 "window"），
+      //   结果这一栏永远是空的，方向逻辑走错分支 —— 从现象上看不出来，
+      //   只能靠"两边用同一个词"这条规矩 + 断言来防。
+      const titleSourceRaw = String(parsed['titleSource'] ?? '')
+      const titleSource: 'smtc' | 'window' | '' =
+        titleSourceRaw === 'smtc'
+          ? 'smtc'
+          : titleSourceRaw === 'window' || titleSourceRaw === 'window-title'
+            ? 'window'
+            : ''
       if (!hasSession) {
         // 没有媒体在放：整行藏掉
         // （开发期的假状态除外：它在的时候别把它清掉）
@@ -300,6 +316,7 @@ export function createMusicController(onChange: (state: MediaSnapshot | null) =>
             artist: '',
             playing: false,
             hasSession: false,
+            titleSource: '',
             audioPlaying: audioState,
             audioPeakKnown,
             volume,
@@ -312,8 +329,10 @@ export function createMusicController(onChange: (state: MediaSnapshot | null) =>
           source,
           title,
           artist,
-          playing,
+          // 歌名来自窗口标题时，SMTC 的 playing 是空的 → 用真实方向填上
+          playing: titleSource === 'smtc' ? playing : (audioState ?? false),
           hasSession: true,
+          titleSource,
           audioPlaying: audioState,
           audioPeakKnown,
           volume,
@@ -349,6 +368,7 @@ export function createMusicController(onChange: (state: MediaSnapshot | null) =>
             artist: '',
             playing: false,
             hasSession: false,
+            titleSource: '',
             audioPlaying: audioPlaying,
             audioPeakKnown: audioPeakKnownState,
             volume: value,
@@ -487,6 +507,7 @@ export function createMusicController(onChange: (state: MediaSnapshot | null) =>
           artist: '',
           playing: false,
           hasSession: false,
+          titleSource: '',
           audioPlaying: null,
           audioPeakKnown: false,
           volume: volume ?? 0,
