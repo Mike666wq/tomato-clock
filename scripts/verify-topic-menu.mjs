@@ -577,7 +577,7 @@ try {
   const mainT = pages2.find((t) => {
     try {
       const u = new URL(t.url)
-      return u.pathname.endsWith('/') && !u.pathname.endsWith('island.html')
+      return !u.pathname.endsWith('island.html')
     } catch {
       return false
     }
@@ -603,8 +603,9 @@ console.log('\n=== 6. 主窗口主题行：跟岛上同一套行为 ===')
 // 这里要验的是**行为一致**，不是鼠标坐标）。
 const mainT = (await targets()).filter((t) => t.type === 'page').find((t) => {
   try {
+    // 主窗口：开发版是 http://localhost:5173/，打包版是 file:///.../index.html
     const u = new URL(t.url)
-    return u.pathname.endsWith('/') && !u.pathname.endsWith('island.html')
+    return !u.pathname.endsWith('island.html')
   } catch {
     return false
   }
